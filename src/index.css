@@ -1,19 +1,23 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg: #0f1117;
-  --bg2: #1a1d27;
-  --bg3: #22263a;
-  --bg4: #2a2f47;
-  --border: rgba(255,255,255,0.08);
-  --border2: rgba(255,255,255,0.13);
-  --text: #e8eaf0;
-  --muted: #8892a4;
-  --accent: #3b82f6;
-  --accent-h: #2563eb;
+  --bg: #f4f9ff;
+  --bg2: #eaf4ff;
+  --bg3: #dcecff;
+  --bg4: #c8e0ff;
+
+  --border: rgba(59,130,246,0.15);
+  --border2: rgba(59,130,246,0.25);
+
+  --text: #0f172a;
+  --muted: #64748b;
+
+  --accent: #38bdf8;     
+  --accent-h: #0ea5e9;    
+
   --green: #10b981;
   --amber: #f59e0b;
   --red: #ef4444;
-  --teal: #14b8a6;
+  --teal: #06b6d4;
   --purple: #8b5cf6;
 }
 body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:14px; }
