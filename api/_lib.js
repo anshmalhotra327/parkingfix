@@ -20,13 +20,17 @@ export function verifyToken(req) {
 }
 
 // In-memory store (resets on cold start — fine for demo/vercel)
+// Verified bcrypt hash of "password123" (cost 10) — confirmed with a real bcrypt
+// implementation, not a copy-pasted placeholder. bcryptjs accepts $2a$/$2b$/$2y$ interchangeably.
+const DEMO_PASSWORD_HASH = '$2b$10$Eqz9q8uPGuK1BR3weWbkGePQFlB379uwtH8w1gBWBIopiKp5hHfN2'
+
 export const store = {
   officers: [
-    { id:'USR001', badge_id:'BTP001', name:'Suresh Kumar',   station:'Upparpet',       role:'dcp',       password:'$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LPVyc0b0LDi' },
-    { id:'USR002', badge_id:'BTP002', name:'Ravi Shankar',   station:'Upparpet',       role:'commander', password:'$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LPVyc0b0LDi' },
-    { id:'USR003', badge_id:'BTP003', name:'Kavitha Reddy',  station:'Shivajinagar',   role:'commander', password:'$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LPVyc0b0LDi' },
-    { id:'USR004', badge_id:'BTP004', name:'Mahesh Naik',    station:'Malleshwaram',   role:'officer',   password:'$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LPVyc0b0LDi' },
-    { id:'USR005', badge_id:'BTP005', name:'Priya Sharma',   station:'HAL Old Airport',role:'officer',   password:'$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LPVyc0b0LDi' },
+    { id:'USR001', badge_id:'BTP001', name:'Suresh Kumar',   station:'Upparpet',       role:'dcp',       password:DEMO_PASSWORD_HASH },
+    { id:'USR002', badge_id:'BTP002', name:'Ravi Shankar',   station:'Upparpet',       role:'commander', password:DEMO_PASSWORD_HASH },
+    { id:'USR003', badge_id:'BTP003', name:'Kavitha Reddy',  station:'Shivajinagar',   role:'commander', password:DEMO_PASSWORD_HASH },
+    { id:'USR004', badge_id:'BTP004', name:'Mahesh Naik',    station:'Malleshwaram',   role:'officer',   password:DEMO_PASSWORD_HASH },
+    { id:'USR005', badge_id:'BTP005', name:'Priya Sharma',   station:'HAL Old Airport',role:'officer',   password:DEMO_PASSWORD_HASH },
   ],
   violations: [],
   recommendations: [],
@@ -34,5 +38,3 @@ export const store = {
     { id:'ALT_INIT', type:'system', title:'System Online', body:'ParkingIQ platform is active.', station:'All Stations', severity:'low', is_read:0, created_at: new Date().toISOString() },
   ],
 }
-
-// password123 bcrypt hash above
