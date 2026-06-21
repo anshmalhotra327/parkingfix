@@ -1,18 +1,28 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useAuth, api } from '../utils/api'
-
+import {
+  FaChartBar,
+  FaMapMarkedAlt,
+  FaRoad,
+  FaCar,
+  FaClipboardList,
+  FaExclamationTriangle,
+  FaSubway,
+  FaBrain,
+  FaBell
+} from "react-icons/fa";
 const NAV = [
-  { to:'/',           icon:'📊', label:'Dashboard' },
-  { to:'/heatmap',    icon:'🗺',  label:'Heatmap' },
-  { to:'/junctions',  icon:'🔴', label:'Junctions' },
-  { to:'/patrol',     icon:'🚔', label:'Patrol' },
-  { to:'/violations', icon:'📋', label:'Violations' },
-  { to:'/offenders',  icon:'⚠️', label:'Offenders' },
-  { to:'/metro',      icon:'🚇', label:'Metro Zones' },
-  { to:'/predict',    icon:'🧠', label:'Predict' },
-  { to:'/alerts',     icon:'🔔', label:'Alerts' },
-]
+  { to:'/', icon:<FaChartBar />, label:'Dashboard' },
+  { to:'/heatmap', icon:<FaMapMarkedAlt />, label:'Heatmap' },
+  { to:'/junctions', icon:<FaRoad />, label:'Junction Analysis' },
+  { to:'/patrol', icon:<FaCar />, label:'Patrol Management' },
+  { to:'/violations', icon:<FaClipboardList />, label:'Violation Records' },
+  { to:'/offenders', icon:<FaExclamationTriangle />, label:'Repeat Offenders' },
+  { to:'/metro', icon:<FaSubway />, label:'Metro Zones' },
+  { to:'/predict', icon:<FaBrain />, label:'Predictive Analytics' },
+  { to:'/alerts', icon:<FaBell />, label:'Alerts' },
+];
 
 export default function Layout() {
   const { officer, logout } = useAuth()
@@ -39,7 +49,7 @@ export default function Layout() {
         <button className="iq-hamburger-btn" onClick={() => setMenuOpen(true)} aria-label="Open menu">
           <span /><span /><span />
         </button>
-        <div style={{ fontSize:15, fontWeight:700, color:'var(--accent)' }}>🚔 ParkingIQ</div>
+        <div style={{ fontSize:15, fontWeight:700, color:'var(--accent)' }}>ParkingIQ</div>
         {unread > 0 && (
           <span style={{ marginLeft:'auto', background:'var(--red)', color:'#fff', fontSize:10, padding:'2px 6px', borderRadius:10 }}>{unread}</span>
         )}
@@ -55,22 +65,48 @@ export default function Layout() {
         }}>
           <div style={{ padding:'18px 16px 14px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
             <div>
-              <div style={{ fontSize:15, fontWeight:700, color:'var(--accent)' }}>🚔 ParkingIQ</div>
-              <div style={{ fontSize:10, color:'var(--muted)', marginTop:2 }}>Bengaluru Traffic Police</div>
+              <div style={{ fontSize:15, fontWeight:700, color:'var(--accent)' }}>ParkingIQ</div>
+              <div style={{ fontSize:10, color:'var(--muted)', marginTop:2 }}>Traffic Intelligence Platform</div>
             </div>
             <button className="iq-close-btn" onClick={() => setMenuOpen(false)} aria-label="Close menu">✕</button>
           </div>
           <nav style={{ flex:1, overflowY:'auto', padding:'8px' }}>
           {NAV.map(n => (
-            <NavLink key={n.to} to={n.to} end={n.to === '/'}
-              style={({ isActive }) => ({
-                display:'flex', alignItems:'center', gap:9, padding:'8px 10px',
-                borderRadius:7, marginBottom:2, textDecoration:'none', fontSize:13,
-                color: isActive ? '#fff' : 'var(--muted)',
-                background: isActive ? 'var(--accent)' : 'transparent',
-                position:'relative',
-              })}>
-              <span style={{ fontSize:14 }}>{n.icon}</span>
+            <NavLink
+  key={n.to}
+  to={n.to}
+  end={n.to === '/'}
+  style={({ isActive }) => ({
+    display:'flex',
+    alignItems:'center',
+    gap:9,
+    padding:'10px 12px',
+
+    borderRadius:10,
+
+    marginBottom:4,
+    textDecoration:'none',
+    fontSize:13,
+
+    fontWeight:500,
+
+    color: isActive ? '#fff' : 'var(--muted)',
+    background: isActive ? 'var(--accent)' : 'transparent',
+
+    boxShadow: isActive
+      ? '0 2px 8px rgba(0,0,0,0.15)'
+      : 'none',
+
+    position:'relative',
+  })}
+>
+             <span style={{
+  fontSize:16,
+  display:'flex',
+  alignItems:'center'
+}}>
+  {n.icon}
+</span>
               {n.label}
               {n.to === '/alerts' && unread > 0 && (
                 <span style={{ marginLeft:'auto', background:'var(--red)', color:'#fff', fontSize:10, padding:'1px 5px', borderRadius:10 }}>{unread}</span>
