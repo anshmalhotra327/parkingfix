@@ -1,4 +1,4 @@
-import { Outlet, NavLink } from 'react-router-dom'
+import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useAuth, api } from '../utils/api'
 
@@ -17,6 +17,8 @@ const NAV = [
 export default function Layout() {
   const { officer, logout } = useAuth()
   const [unread, setUnread] = useState(0)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const location = useLocation()
 
   useEffect(() => {
     api.get('/alerts/unread').then(r => setUnread(r.data.length)).catch(() => {})
@@ -27,17 +29,38 @@ export default function Layout() {
     return () => clearInterval(t)
   }, [])
 
+  // Auto-close the mobile drawer whenever the route changes
+  useEffect(() => { setMenuOpen(false) }, [location.pathname])
+
   return (
-    <div style={{ display:'flex', height:'100vh', overflow:'hidden' }}>
-      <aside style={{
-        width:200, background:'var(--bg2)', borderRight:'1px solid var(--border)',
-        display:'flex', flexDirection:'column', flexShrink:0,
-      }}>
-        <div style={{ padding:'18px 16px 14px', borderBottom:'1px solid var(--border)' }}>
-          <div style={{ fontSize:15, fontWeight:700, color:'var(--accent)' }}>🚔 ParkingIQ</div>
-          <div style={{ fontSize:10, color:'var(--muted)', marginTop:2 }}>Bengaluru Traffic Police</div>
-        </div>
-        <nav style={{ flex:1, overflowY:'auto', padding:'8px' }}>
+    <div style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden' }}>
+      {/* Mobile-only top bar with hamburger toggle (hidden on desktop via CSS) */}
+      <div className="iq-topbar">
+        <button className="iq-hamburger-btn" onClick={() => setMenuOpen(true)} aria-label="Open menu">
+          <span /><span /><span />
+        </button>
+        <div style={{ fontSize:15, fontWeight:700, color:'var(--accent)' }}>🚔 ParkingIQ</div>
+        {unread > 0 && (
+          <span style={{ marginLeft:'auto', background:'var(--red)', color:'#fff', fontSize:10, padding:'2px 6px', borderRadius:10 }}>{unread}</span>
+        )}
+      </div>
+
+      <div style={{ display:'flex', flex:1, overflow:'hidden', position:'relative' }}>
+        {/* Backdrop, mobile only, shown when drawer is open */}
+        {menuOpen && <div className="iq-overlay" onClick={() => setMenuOpen(false)} />}
+
+        <aside className={`iq-sidebar${menuOpen ? ' open' : ''}`} style={{
+          width:200, background:'var(--bg2)', borderRight:'1px solid var(--border)',
+          display:'flex', flexDirection:'column', flexShrink:0,
+        }}>
+          <div style={{ padding:'18px 16px 14px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <div>
+              <div style={{ fontSize:15, fontWeight:700, color:'var(--accent)' }}>🚔 ParkingIQ</div>
+              <div style={{ fontSize:10, color:'var(--muted)', marginTop:2 }}>Bengaluru Traffic Police</div>
+            </div>
+            <button className="iq-close-btn" onClick={() => setMenuOpen(false)} aria-label="Close menu">✕</button>
+          </div>
+          <nav style={{ flex:1, overflowY:'auto', padding:'8px' }}>
           {NAV.map(n => (
             <NavLink key={n.to} to={n.to} end={n.to === '/'}
               style={({ isActive }) => ({
@@ -55,19 +78,20 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div style={{ padding:'12px', borderTop:'1px solid var(--border)' }}>
-          <div style={{ fontSize:12, color:'var(--text)', fontWeight:500 }}>{officer?.name}</div>
-          <div style={{ fontSize:11, color:'var(--muted)' }}>{officer?.station} · {officer?.role}</div>
-          <button onClick={logout} style={{
-            marginTop:8, width:'100%', padding:'6px', background:'transparent',
-            border:'1px solid var(--border)', borderRadius:6, color:'var(--muted)',
-            fontSize:12, cursor:'pointer',
-          }}>Sign out</button>
-        </div>
-      </aside>
-      <main style={{ flex:1, overflowY:'auto', background:'var(--bg)' }}>
-        <Outlet />
-      </main>
+          <div style={{ padding:'12px', borderTop:'1px solid var(--border)' }}>
+            <div style={{ fontSize:12, color:'var(--text)', fontWeight:500 }}>{officer?.name}</div>
+            <div style={{ fontSize:11, color:'var(--muted)' }}>{officer?.station} · {officer?.role}</div>
+            <button onClick={logout} style={{
+              marginTop:8, width:'100%', padding:'6px', background:'transparent',
+              border:'1px solid var(--border)', borderRadius:6, color:'var(--muted)',
+              fontSize:12, cursor:'pointer',
+            }}>Sign out</button>
+          </div>
+        </aside>
+        <main style={{ flex:1, overflowY:'auto', overflowX:'hidden', minWidth:0, background:'var(--bg)' }}>
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

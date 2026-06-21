@@ -16,7 +16,7 @@ export default function Login() {
 
   return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg)' }}>
-      <div style={{ width:360, background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:12, padding:32 }}>
+      <div style={{ width:'min(360px, 92vw)', background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:12, padding:32 }}>
         <div style={{ marginBottom:24 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6 }}>
             <span style={{ fontSize:22 }}>🚔</span>
