@@ -1,0 +1,22 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/api/alerts", "destination": "/api/alerts-handler" },
+    { "source": "/api/alerts/:action", "destination": "/api/alerts-handler" },
+
+    { "source": "/api/analytics/:action", "destination": "/api/analytics-handler" },
+
+    { "source": "/api/auth/:action", "destination": "/api/auth-handler" },
+
+    { "source": "/api/offenders/:action", "destination": "/api/offenders-handler" },
+
+    { "source": "/api/patrol/:action", "destination": "/api/patrol-handler" },
+
+    { "source": "/api/violations", "destination": "/api/violations-handler" },
+    { "source": "/api/violations/:action", "destination": "/api/violations-handler" },
+
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
