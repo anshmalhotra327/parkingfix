@@ -79,7 +79,7 @@ export default function Heatmap() {
     queryFn: () => api.get('/impact/junctions?top_n=8').then(r => r.data),
   })
 
-  // ── Init Map ────────────────────────────────────────────────────────────
+  // ── Init map ────────────────────────────────────────────────────────────
   useEffect(() => {
     loadLeaflet(() => {
       if (mapRef.current || !mapDivRef.current) return
@@ -107,8 +107,6 @@ export default function Heatmap() {
       })
 
       mapRef.current = map
-      
-      // Force map layout recalculation immediately before enabling child configurations
       map.invalidateSize()
       setReady(true)
     })
@@ -123,58 +121,96 @@ export default function Heatmap() {
     }
   }, [])
 
-  // ── Heatmap Layer Management ─────────────────────────────────────────────
+  // ── Heatmap layer with Dynamic Zoom Rescaling ───────────────────────────
   useEffect(() => {
     if (!ready || !mapRef.current || !data?.points) return
     const L = window.L
 
-    // Ensure map dimensions are completely valid before positioning canvas layers
     mapRef.current.invalidateSize()
+
+    // Helper to calculate smart configurations per zoom level to maintain structural context
+    const getHeatSettings = (zoom) => {
+      let radius = 25
+      let blur = 15
+      let maxIntensity = 1.0
+
+      if (zoom >= 16) {
+        radius = 75; blur = 35; maxIntensity = 0.2 // Spreads point definitions wide when deep zoomed in
+      } else if (zoom >= 14) {
+        radius = 50; blur = 25; maxIntensity = 0.5 
+      } else if (zoom <= 11) {
+        radius = 14; blur = 10; maxIntensity = 2.8 // Prevents color bleeding when zooming out
+      }
+      return { radius, blur, max: maxIntensity }
+    }
 
     const maxC = data.max_count || 1
     const sqrtMax = Math.sqrt(maxC)
     
-    // Explicitly parse values to float/numbers to protect against API string returns
     const pts = data.points.map(p => [
       parseFloat(p.lat), 
       parseFloat(p.lng), 
       Math.sqrt(Number(p.count)) / sqrtMax
     ])
 
+    const currentZoom = mapRef.current.getZoom()
+    const settings = getHeatSettings(currentZoom)
+
     if (heatRef.current) {
-      // High-performance direct update instead of dismantling/recreating layer
       heatRef.current.setLatLngs(pts)
+      heatRef.current.setOptions({
+        radius: settings.radius,
+        blur: settings.blur,
+        max: settings.max
+      })
     } else {
-      // Create new heatmap layer instances only once
       heatRef.current = L.heatLayer(pts, {
-        radius: 30,        
-        blur: 18,
-        minOpacity: 0.4,   
-        maxZoom: 17,
-        max: 1.0,
+        radius: settings.radius,
+        blur: settings.blur,
+        minOpacity: 0.35,   
+        maxZoom: 18,
+        max: settings.max,
         gradient: {
-          '0.1': '#3b82f6',   // Low (Blue)
-          '0.4': '#8b5cf6',   // Medium-Low (Purple)
-          '0.6': '#f59e0b',   // Medium (Amber)
-          '0.8': '#ef4444',   // High (Red)
-          '1.0': '#ffffff'    // Extreme Core (White)
+          '0.1': '#3b82f6',   // Low
+          '0.4': '#8b5cf6',   // Med-Low
+          '0.6': '#f59e0b',   // Med
+          '0.8': '#ef4444',   // High
+          '1.0': '#ffffff'    // Extreme Core
         },
       }).addTo(mapRef.current)
     }
+
+    // Capture zoom adjustments on-the-fly
+    const handleZoom = () => {
+      if (!heatRef.current || !mapRef.current) return
+      const newZoom = mapRef.current.getZoom()
+      const newSettings = getHeatSettings(newZoom)
+      
+      heatRef.current.setOptions({
+        radius: newSettings.radius,
+        blur: newSettings.blur,
+        max: newSettings.max
+      })
+    }
+
+    mapRef.current.on('zoomend', handleZoom)
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.off('zoomend', handleZoom)
+      }
+    }
   }, [data, ready])
 
-  // ── Tile Style Swap ─────────────────────────────────────────────────────
+  // ── Tile style swap ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!ready || !mapRef.current) return
     const L = window.L
-    
     if (tileRef.current) mapRef.current.removeLayer(tileRef.current)
-    
     const t = MAP_TILES[mapStyle]
     tileRef.current = L.tileLayer(t.url, { attribution: t.attr, maxZoom: 19 })
     tileRef.current.addTo(mapRef.current)
     
-    // Bring heatmap to front automatically if layer swap occurred
     if (heatRef.current) {
       heatRef.current.bringToFront?.()
     }
@@ -186,21 +222,30 @@ export default function Heatmap() {
         title="Violation Heatmap"
         subtitle="Live map of parking violation density — zoom and pan freely"
         right={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 11, color: 'var(--muted)' }}>Min:</span>
+          /* Mobile fix: Added dynamic flex wrapping style with maximum horizontal scroll support */
+          <div className="map-controls-tray" style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 6,
+            maxWidth: '100vw',
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            padding: '4px 0'
+          }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)', paddingLeft: 4 }}>Min:</span>
             {[3, 5, 10, 20].map(n => (
               <button key={n} onClick={() => setMinCount(n)} style={{
                 padding: '4px 10px', borderRadius: 5, fontSize: 11,
-                cursor: 'pointer', border: 'none',
+                cursor: 'pointer', border: 'none', flexShrink: 0,
                 background: minCount === n ? 'var(--accent)' : 'var(--bg3)',
                 color: minCount === n ? '#fff' : 'var(--muted)',
               }}>{n}+</button>
             ))}
-            <div style={{ width: 1, height: 14, background: 'var(--border)', margin: '0 4px' }} />
+            <div style={{ width: 1, height: 14, background: 'var(--border)', margin: '0 4px', flexShrink: 0 }} />
             {['dark', 'street', 'satellite'].map(s => (
               <button key={s} onClick={() => setMapStyle(s)} style={{
                 padding: '4px 10px', borderRadius: 5, fontSize: 11,
-                cursor: 'pointer', border: 'none', textTransform: 'capitalize',
+                cursor: 'pointer', border: 'none', textTransform: 'capitalize', flexShrink: 0,
                 background: mapStyle === s ? '#6366f1' : 'var(--bg3)',
                 color: mapStyle === s ? '#fff' : 'var(--muted)',
               }}>{s}</button>
@@ -210,6 +255,7 @@ export default function Heatmap() {
       />
 
       <style>{`
+        /* Responsive CSS utilities */
         .piq-tip {
           background: rgba(13,21,32,0.92) !important;
           border: 1px solid rgba(20,184,166,0.45) !important;
@@ -228,10 +274,24 @@ export default function Heatmap() {
           color: rgba(255,255,255,0.3) !important; font-size: 9px !important;
         }
         .leaflet-control-attribution a { color: rgba(255,255,255,0.4) !important; }
+        
+        .map-controls-tray::-webkit-scrollbar { display: none; } /* Hide track lines on mobile interfaces */
+        
+        .layout-grid {
+          display: grid;
+          grid-template-columns: 1fr 260px;
+          gap: 16px;
+        }
+
+        @media (max-width: 900px) {
+          .layout-grid {
+            grid-template-columns: 1fr;
+          }
+        }
       `}</style>
 
-      <div style={{ padding: 24 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16 }}>
+      <div style={{ padding: '12px md:24px' }}>
+        <div className="layout-grid">
 
           <Card style={{ padding: 0, overflow: 'hidden', position: 'relative', background: '#0d1520' }}>
             <div
