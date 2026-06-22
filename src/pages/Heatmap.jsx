@@ -135,20 +135,26 @@ export default function Heatmap() {
     if (heatRef.current) mapRef.current.removeLayer(heatRef.current)
 
     const maxC = data.max_count || 1
-    heatRef.current = L.heatLayer(
-      data.points.map(p => [p.lat, p.lng, p.count / maxC]),
-      {
-        radius: 28, blur: 22, maxZoom: 15, max: 1.0,
-        gradient: {
-          0.00: '#0ea5e9',
-          0.25: '#6366f1',
-          0.45: '#f59e0b',
-          0.65: '#ef4444',
-          0.85: '#ff2200',
-          1.00: '#ffffff',
-        },
-      }
-    ).addTo(mapRef.current)
+    // Normalise so even low-count zones are visible
+    // Use sqrt to compress range — prevents one mega-hotspot drowning everything
+    const sqrtMax = Math.sqrt(maxC)
+    const pts = data.points.map(p => [p.lat, p.lng, Math.sqrt(p.count) / sqrtMax])
+
+    heatRef.current = L.heatLayer(pts, {
+      radius: 35,        // larger blobs — visible at zoom 12
+      blur: 25,
+      minOpacity: 0.4,   // KEY: never fully transparent even for low-count zones
+      maxZoom: 17,
+      max: 1.0,
+      gradient: {
+        0.0:  '#3b82f6',   // blue   — low
+        0.3:  '#8b5cf6',   // purple — medium-low
+        0.5:  '#f59e0b',   // amber  — medium
+        0.7:  '#ef4444',   // red    — high
+        0.9:  '#ff2200',   // bright red — very high
+        1.0:  '#ffffff',   // white core — extreme
+      },
+    }).addTo(mapRef.current)
   }, [data, ready])
 
   // ── Tile style swap ─────────────────────────────────────────────────────

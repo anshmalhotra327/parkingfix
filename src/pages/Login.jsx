@@ -19,8 +19,8 @@ export default function Login() {
       <div style={{ width:'min(360px, 92vw)', background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:12, padding:32 }}>
         <div style={{ marginBottom:24 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6 }}>
-            <span style={{ fontSize:22 }}>🚔</span>
-            <span style={{ fontSize:18, fontWeight:600, color:'var(--text)' }}>ParkingIQ</span>
+            <span style={{ fontSize:22 }}></span>
+            <span style={{ fontSize:18, fontWeight:600, color:'var(--text)' }}>Parking-IQ</span>
           </div>
           <p style={{ color:'var(--muted)', fontSize:13 }}>Traffic Intelligence Platform</p>
         </div>
