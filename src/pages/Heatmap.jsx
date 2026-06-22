@@ -3,42 +3,74 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../utils/api'
 import { PageHeader, Card, LoadingBox, ScoreBar } from '../components/UI'
 
-// Tight bounds around actual Bengaluru violation data
-const LAT_MIN = 12.86, LAT_MAX = 13.08
-const LNG_MIN = 77.49, LNG_MAX = 77.72
+const BENGALURU = [12.9716, 77.5946]
 
-// Key Bengaluru landmarks for orientation
-const LANDMARKS = [
-  { name: 'KR Market',      lat: 12.9679, lng: 77.5759 },
-  { name: 'MG Road',        lat: 12.9756, lng: 77.6099 },
+const METRO_STATIONS = [
   { name: 'Majestic',       lat: 12.9767, lng: 77.5713 },
-  { name: 'Shivajinagar',   lat: 12.9902, lng: 77.5980 },
-  { name: 'Malleshwaram',   lat: 13.0035, lng: 77.5701 },
+  { name: 'MG Road',        lat: 12.9756, lng: 77.6099 },
   { name: 'Indiranagar',    lat: 12.9784, lng: 77.6408 },
-  { name: 'Jayanagar',      lat: 12.9308, lng: 77.5832 },
-  { name: 'Koramangala',    lat: 12.9352, lng: 77.6245 },
   { name: 'Rajajinagar',    lat: 12.9919, lng: 77.5511 },
-  { name: 'Whitefield',     lat: 12.9698, lng: 77.7499 },
-  { name: 'Banashankari',   lat: 12.9255, lng: 77.5468 },
-  { name: 'Hebbal',         lat: 13.0450, lng: 77.5940 },
+  { name: 'Hosahalli',      lat: 12.9776, lng: 77.5188 },
+  { name: 'Nagasandra',     lat: 13.0484, lng: 77.5133 },
+  { name: 'Byappanahalli',  lat: 12.9926, lng: 77.6478 },
+  { name: 'Vijayanagar',    lat: 12.9673, lng: 77.5310 },
+  { name: 'Yelachenahalli', lat: 12.8934, lng: 77.5877 },
 ]
 
-// Metro stations
-const METRO = [
-  { name: 'Majestic',    lat: 12.9767, lng: 77.5713 },
-  { name: 'MG Road',     lat: 12.9756, lng: 77.6099 },
-  { name: 'Indiranagar', lat: 12.9784, lng: 77.6408 },
-  { name: 'Rajajinagar', lat: 12.9919, lng: 77.5511 },
-  { name: 'Hosahalli',   lat: 12.9776, lng: 77.5188 },
-  { name: 'Nagasandra',  lat: 13.0484, lng: 77.5133 },
-  { name: 'Hebbal',      lat: 13.0350, lng: 77.5940 },
-]
+const MAP_TILES = {
+  dark: {
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    attr: '&copy; <a href="https://carto.com">CARTO</a> &copy; <a href="https://openstreetmap.org">OSM</a>',
+  },
+  street: {
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    attr: '&copy; <a href="https://carto.com">CARTO</a>',
+  },
+  satellite: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attr: '&copy; Esri',
+  },
+}
+
+// Load Leaflet + leaflet.heat from CDN once, then call cb
+function loadLeaflet(cb) {
+  if (window.L && window.L.heatLayer) { cb(); return }
+
+  const addCSS = href => {
+    if (!document.querySelector(`link[href="${href}"]`)) {
+      const l = document.createElement('link')
+      l.rel = 'stylesheet'; l.href = href
+      document.head.appendChild(l)
+    }
+  }
+  const addScript = (src, next) => {
+    if (document.querySelector(`script[src="${src}"]`)) { next(); return }
+    const s = document.createElement('script')
+    s.src = src; s.onload = next; document.head.appendChild(s)
+  }
+
+  addCSS('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css')
+  addScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', () => {
+    // Fix Leaflet icon paths broken by Vite
+    delete window.L.Icon.Default.prototype._getIconUrl
+    window.L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    })
+    addScript('https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js', cb)
+  })
+}
 
 export default function Heatmap() {
-  const canvasRef = useRef(null)
-  const [minCount, setMinCount] = useState(5)
-  const [hoveredZone, setHoveredZone] = useState(null)
-  const pointsRef = useRef([])
+  const mapDivRef    = useRef(null)
+  const mapRef       = useRef(null)   // L.map instance
+  const tileRef      = useRef(null)   // current tile layer
+  const heatRef      = useRef(null)   // L.heatLayer
+  const metroRef     = useRef([])     // metro circle markers
+  const [ready, setReady] = useState(false)
+  const [minCount, setMinCount]   = useState(5)
+  const [mapStyle, setMapStyle]   = useState('dark')
 
   const { data, isLoading } = useQuery({
     queryKey: ['heatmap', minCount],
@@ -50,272 +82,221 @@ export default function Heatmap() {
     queryFn: () => api.get('/impact/junctions?top_n=8').then(r => r.data),
   })
 
-  // Convert lat/lng to canvas x/y
-  const toXY = (lat, lng, W, H) => ({
-    x: ((lng - LNG_MIN) / (LNG_MAX - LNG_MIN)) * W,
-    y: H - ((lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * H,
-  })
-
+  // ── Step 1: load Leaflet scripts, then init map ───────────────────────
   useEffect(() => {
-    if (!data?.points || !canvasRef.current) return
-    const canvas = canvasRef.current
-    const ctx = canvas.getContext('2d')
-    const W = canvas.width  = canvas.offsetWidth
-    const H = canvas.height = canvas.offsetHeight
+    loadLeaflet(() => {
+      if (mapRef.current || !mapDivRef.current) return
+      const L = window.L
+      const map = L.map(mapDivRef.current, {
+        center: BENGALURU, zoom: 12, zoomControl: true,
+      })
 
-    // ── Background: dark map-like gradient ───────────────────
-    const bg = ctx.createLinearGradient(0, 0, W, H)
-    bg.addColorStop(0,   '#0d1520')
-    bg.addColorStop(0.5, '#101820')
-    bg.addColorStop(1,   '#0d1520')
-    ctx.fillStyle = bg
-    ctx.fillRect(0, 0, W, H)
+      // default dark tile
+      tileRef.current = L.tileLayer(MAP_TILES.dark.url, {
+        attribution: MAP_TILES.dark.attr, maxZoom: 19,
+      }).addTo(map)
 
-    // ── Grid: faint lat/lng lines ─────────────────────────────
-    ctx.strokeStyle = 'rgba(255,255,255,0.04)'
-    ctx.lineWidth = 0.5
-    const latSteps = 6, lngSteps = 8
-    for (let i = 0; i <= latSteps; i++) {
-      const lat = LAT_MIN + (LAT_MAX - LAT_MIN) * (i / latSteps)
-      const { y } = toXY(lat, LNG_MIN, W, H)
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke()
-      ctx.fillStyle = 'rgba(255,255,255,0.12)'
-      ctx.font = '9px monospace'
-      ctx.fillText(lat.toFixed(2) + '°', 4, y - 2)
+      // metro circles
+      METRO_STATIONS.forEach(m => {
+        const c = L.circleMarker([m.lat, m.lng], {
+          radius: 7, fillColor: '#14b8a6', fillOpacity: 0.5,
+          color: '#14b8a6', weight: 2, opacity: 0.9,
+        }).addTo(map)
+        c.bindTooltip(`🚇 ${m.name}`, {
+          permanent: false, direction: 'top', className: 'piq-metro-tip',
+        })
+        metroRef.current.push(c)
+      })
+
+      mapRef.current = map
+      setReady(true)
+    })
+    return () => {
+      // cleanup on unmount
+      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
     }
-    for (let i = 0; i <= lngSteps; i++) {
-      const lng = LNG_MIN + (LNG_MAX - LNG_MIN) * (i / lngSteps)
-      const { x } = toXY(LAT_MIN, lng, W, H)
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke()
-      ctx.fillStyle = 'rgba(255,255,255,0.12)'
-      ctx.font = '9px monospace'
-      ctx.fillText(lng.toFixed(2) + '°', x + 2, H - 4)
-    }
+  }, [])
 
-    // ── Heatmap blobs ─────────────────────────────────────────
+  // ── Step 2: update heatmap layer when data arrives ────────────────────
+  useEffect(() => {
+    if (!ready || !mapRef.current || !data?.points) return
+    const L = window.L
+    if (heatRef.current) mapRef.current.removeLayer(heatRef.current)
+
     const maxC = data.max_count || 1
-    const rendered = []
+    const pts  = data.points.map(p => [p.lat, p.lng, p.count / maxC])
 
-    // Sort descending so high-intensity renders last (on top)
-    const sorted = [...data.points].sort((a, b) => a.count - b.count)
+    heatRef.current = L.heatLayer(pts, {
+      radius: 28, blur: 22, maxZoom: 15, max: 1.0,
+      gradient: {
+        0.00: '#0ea5e9',
+        0.25: '#6366f1',
+        0.45: '#f59e0b',
+        0.65: '#ef4444',
+        0.85: '#ff2200',
+        1.00: '#ffffff',
+      },
+    }).addTo(mapRef.current)
+  }, [data, ready])
 
-    sorted.forEach(p => {
-      const { x, y } = toXY(p.lat, p.lng, W, H)
-      const intensity = p.count / maxC
-      const r = 8 + intensity * 38   // blob radius: 8–46px
-
-      const grad = ctx.createRadialGradient(x, y, 0, x, y, r)
-      if (intensity > 0.6) {
-        grad.addColorStop(0,   `rgba(255, 50,  30,  ${0.55 + intensity * 0.35})`)
-        grad.addColorStop(0.3, `rgba(255,100,  20,  ${0.3  + intensity * 0.2})`)
-        grad.addColorStop(0.7, `rgba(255,160,   0,  ${0.12 + intensity * 0.1})`)
-        grad.addColorStop(1,   'rgba(0,0,0,0)')
-      } else if (intensity > 0.25) {
-        grad.addColorStop(0,   `rgba(245,158,  11, ${0.5 + intensity * 0.3})`)
-        grad.addColorStop(0.4, `rgba(234,179,   8, ${0.2 + intensity * 0.2})`)
-        grad.addColorStop(1,   'rgba(0,0,0,0)')
-      } else {
-        grad.addColorStop(0,   `rgba( 59,130, 246, ${0.35 + intensity * 0.3})`)
-        grad.addColorStop(0.5, `rgba( 99,102, 241, ${0.12 + intensity * 0.1})`)
-        grad.addColorStop(1,   'rgba(0,0,0,0)')
-      }
-
-      ctx.globalCompositeOperation = 'screen'
-      ctx.fillStyle = grad
-      ctx.beginPath()
-      ctx.arc(x, y, r, 0, Math.PI * 2)
-      ctx.fill()
-
-      rendered.push({ x, y, r: Math.max(8, r * 0.5), count: p.count, lat: p.lat, lng: p.lng })
-    })
-    pointsRef.current = rendered
-    ctx.globalCompositeOperation = 'source-over'
-
-    // ── Landmark dots ─────────────────────────────────────────
-    LANDMARKS.forEach(lm => {
-      const { x, y } = toXY(lm.lat, lm.lng, W, H)
-      // dot
-      ctx.beginPath()
-      ctx.arc(x, y, 3, 0, Math.PI * 2)
-      ctx.fillStyle = 'rgba(255,255,255,0.35)'
-      ctx.fill()
-      // label
-      ctx.font = '10px -apple-system, sans-serif'
-      ctx.fillStyle = 'rgba(255,255,255,0.55)'
-      ctx.fillText(lm.name, x + 5, y + 3)
-    })
-
-    // ── Metro station markers ─────────────────────────────────
-    METRO.forEach(m => {
-      const { x, y } = toXY(m.lat, m.lng, W, H)
-      ctx.beginPath()
-      ctx.arc(x, y, 5, 0, Math.PI * 2)
-      ctx.fillStyle = 'rgba(20,184,166,0.3)'
-      ctx.fill()
-      ctx.strokeStyle = 'rgba(20,184,166,0.8)'
-      ctx.lineWidth = 1.5
-      ctx.stroke()
-    })
-
-    // ── Compass rose ──────────────────────────────────────────
-    const cx = W - 28, cy = 28
-    ctx.font = 'bold 11px sans-serif'
-    ctx.fillStyle = 'rgba(255,255,255,0.5)'
-    ctx.textAlign = 'center'
-    ctx.fillText('N', cx, cy - 12)
-    ctx.fillText('S', cx, cy + 18)
-    ctx.fillText('W', cx - 14, cy + 4)
-    ctx.fillText('E', cx + 14, cy + 4)
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)'
-    ctx.lineWidth = 1
-    ctx.beginPath(); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx, cy + 8); ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(cx - 8, cy); ctx.lineTo(cx + 8, cy); ctx.stroke()
-    ctx.textAlign = 'left'
-
-    // ── Scale bar ─────────────────────────────────────────────
-    // ~5km in pixels at this zoom
-    const km5px = (5 / 111) / (LNG_MAX - LNG_MIN) * W
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)'
-    ctx.lineWidth = 2
-    ctx.beginPath(); ctx.moveTo(16, H - 22); ctx.lineTo(16 + km5px, H - 22); ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(16, H - 18); ctx.lineTo(16, H - 26); ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(16 + km5px, H - 18); ctx.lineTo(16 + km5px, H - 26); ctx.stroke()
-    ctx.font = '10px sans-serif'
-    ctx.fillStyle = 'rgba(255,255,255,0.5)'
-    ctx.fillText('5 km', 16 + km5px / 2 - 10, H - 26)
-
-    // ── Zone count ────────────────────────────────────────────
-    ctx.fillStyle = 'rgba(255,255,255,0.25)'
-    ctx.font = '10px monospace'
-    ctx.fillText(`${data.total_points} zones · ${minCount}+ violations`, 16, H - 8)
-
-  }, [data, minCount])
-
-  // Mouse hover to show zone info
-  const handleMouseMove = (e) => {
-    if (!canvasRef.current || !pointsRef.current.length) return
-    const rect = canvasRef.current.getBoundingClientRect()
-    const mx = e.clientX - rect.left
-    const my = e.clientY - rect.top
-    const W = canvasRef.current.offsetWidth
-    const H = canvasRef.current.offsetHeight
-    // find nearest point
-    let best = null, bestD = 30
-    pointsRef.current.forEach(p => {
-      const d = Math.sqrt((p.x - mx) ** 2 + (p.y - my) ** 2)
-      if (d < bestD) { bestD = d; best = p }
-    })
-    if (best) {
-      setHoveredZone({ ...best, px: mx, py: my })
-    } else {
-      setHoveredZone(null)
-    }
-  }
+  // ── Step 3: swap tile layer on style change ───────────────────────────
+  useEffect(() => {
+    if (!ready || !mapRef.current) return
+    const L = window.L
+    if (tileRef.current) mapRef.current.removeLayer(tileRef.current)
+    const t = MAP_TILES[mapStyle]
+    tileRef.current = L.tileLayer(t.url, { attribution: t.attr, maxZoom: 19 })
+    tileRef.current.addTo(mapRef.current)
+    tileRef.current.setZIndex(0)
+    if (heatRef.current) heatRef.current.setZIndex && heatRef.current.setZIndex(1)
+  }, [mapStyle, ready])
 
   return (
     <div>
       <PageHeader
         title="Violation Heatmap"
-        subtitle="Geographic density of parking violations across Bengaluru"
+        subtitle="Live map of parking violation density across Bengaluru — zoom and pan freely"
         right={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 11, color: 'var(--muted)' }}>Min violations:</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>Min:</span>
             {[3, 5, 10, 20].map(n => (
               <button key={n} onClick={() => setMinCount(n)} style={{
-                padding: '4px 12px', borderRadius: 5, fontSize: 11, cursor: 'pointer', border: 'none',
+                padding: '4px 10px', borderRadius: 5, fontSize: 11,
+                cursor: 'pointer', border: 'none',
                 background: minCount === n ? 'var(--accent)' : 'var(--bg3)',
                 color: minCount === n ? '#fff' : 'var(--muted)',
               }}>{n}+</button>
+            ))}
+            <div style={{ width: 1, height: 14, background: 'var(--border)', margin: '0 4px' }} />
+            {['dark', 'street', 'satellite'].map(s => (
+              <button key={s} onClick={() => setMapStyle(s)} style={{
+                padding: '4px 10px', borderRadius: 5, fontSize: 11,
+                cursor: 'pointer', border: 'none', textTransform: 'capitalize',
+                background: mapStyle === s ? '#6366f1' : 'var(--bg3)',
+                color: mapStyle === s ? '#fff' : 'var(--muted)',
+              }}>{s}</button>
             ))}
           </div>
         }
       />
 
+      {/* Leaflet CSS overrides */}
+      <style>{`
+        .piq-metro-tip {
+          background: rgba(13,21,32,0.92) !important;
+          border: 1px solid rgba(20,184,166,0.45) !important;
+          color: #e8eaf0 !important;
+          font-size: 12px !important;
+          border-radius: 6px !important;
+          box-shadow: none !important;
+          padding: 4px 9px !important;
+        }
+        .piq-metro-tip::before { display:none !important; }
+        .leaflet-control-zoom a {
+          background: #1a1d27 !important;
+          color: #e8eaf0 !important;
+          border-color: rgba(255,255,255,0.12) !important;
+        }
+        .leaflet-control-zoom a:hover { background: #22263a !important; }
+        .leaflet-control-attribution {
+          background: rgba(13,21,32,0.6) !important;
+          color: rgba(255,255,255,0.3) !important;
+          font-size: 9px !important;
+        }
+        .leaflet-control-attribution a { color: rgba(255,255,255,0.4) !important; }
+      `}</style>
+
       <div style={{ padding: 24 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16 }}>
 
-          {/* Map canvas */}
+          {/* Map container */}
           <Card style={{ padding: 0, overflow: 'hidden', position: 'relative', background: '#0d1520' }}>
-            {isLoading && <LoadingBox h={520} />}
-            {!isLoading && (
-              <canvas
-                ref={canvasRef}
-                onMouseMove={handleMouseMove}
-                onMouseLeave={() => setHoveredZone(null)}
-                style={{ width: '100%', height: 520, display: 'block', cursor: 'crosshair' }}
-              />
-            )}
+            {!ready && <LoadingBox h={540} />}
 
-            {/* Hover tooltip */}
-            {hoveredZone && (
+            {/* Leaflet mounts into this div — always rendered so ref is stable */}
+            <div
+              ref={mapDivRef}
+              style={{ width: '100%', height: 540, display: ready ? 'block' : 'none' }}
+            />
+
+            {/* Fetching overlay */}
+            {isLoading && ready && (
               <div style={{
-                position: 'absolute',
-                left: hoveredZone.px + 12,
-                top: hoveredZone.py - 10,
-                background: 'rgba(15,17,23,0.92)',
-                border: '1px solid var(--border)',
-                borderRadius: 7, padding: '7px 10px',
-                fontSize: 11, color: 'var(--text)',
-                pointerEvents: 'none', zIndex: 10,
-                backdropFilter: 'blur(6px)',
+                position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+                background: 'rgba(13,21,32,0.88)', borderRadius: 6,
+                padding: '5px 14px', fontSize: 11, color: 'var(--muted)',
+                display: 'flex', alignItems: 'center', gap: 6, zIndex: 1000,
               }}>
-                <div style={{ fontWeight: 600, marginBottom: 2 }}>📍 Zone</div>
-                <div style={{ color: 'var(--muted)' }}>{hoveredZone.lat.toFixed(4)}°N, {hoveredZone.lng.toFixed(4)}°E</div>
-                <div style={{ color: 'var(--red)', fontWeight: 600, marginTop: 3 }}>{hoveredZone.count.toLocaleString()} violations</div>
+                <span style={{
+                  display: 'inline-block', width: 10, height: 10,
+                  border: '2px solid var(--accent)', borderTopColor: 'transparent',
+                  borderRadius: '50%', animation: 'mapspin 0.8s linear infinite',
+                }} />
+                Updating…
+                <style>{`@keyframes mapspin { to { transform:rotate(360deg); } }`}</style>
               </div>
             )}
 
             {/* Legend */}
             <div style={{
-              position: 'absolute', bottom: 38, right: 12,
-              background: 'rgba(13,21,32,0.85)', borderRadius: 7,
-              padding: '8px 12px', backdropFilter: 'blur(4px)',
-              border: '1px solid rgba(255,255,255,0.08)'
+              position: 'absolute', bottom: 38, right: 12, zIndex: 999,
+              background: 'rgba(13,21,32,0.88)', borderRadius: 7,
+              padding: '8px 12px', border: '1px solid rgba(255,255,255,0.08)',
             }}>
               <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Intensity</div>
               {[
-                ['#ef4444', 'Critical (>60%)'],
-                ['#f59e0b', 'High (25–60%)'],
-                ['#3b82f6', 'Low (<25%)'],
+                ['#ff2200','Extreme'],
+                ['#ef4444','Critical'],
+                ['#f59e0b','High'],
+                ['#6366f1','Low'],
+                ['#0ea5e9','Minimal'],
               ].map(([c, l]) => (
-                <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: c, opacity: 0.85 }} />
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)' }}>{l}</span>
+                <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: c }} />
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)' }}>{l}</span>
                 </div>
               ))}
-              <div style={{ marginTop: 6, paddingTop: 5, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ marginTop: 5, paddingTop: 5, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid #14b8a6', background: 'rgba(20,184,166,0.2)' }} />
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)' }}>Metro station</span>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid #14b8a6', background: 'rgba(20,184,166,0.2)' }} />
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Metro station</span>
                 </div>
               </div>
             </div>
+
+            {/* Zone count */}
+            {data && (
+              <div style={{
+                position: 'absolute', bottom: 38, left: 12, zIndex: 999,
+                background: 'rgba(13,21,32,0.88)', borderRadius: 6,
+                padding: '5px 10px', border: '1px solid rgba(255,255,255,0.07)',
+                fontSize: 10, color: 'rgba(255,255,255,0.4)',
+              }}>
+                {data.total_points} zones · {minCount}+ violations
+              </div>
+            )}
           </Card>
 
           {/* Right panel */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <Card>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>📊 Stats</div>
-              {data && (
-                <div style={{ fontSize: 12, lineHeight: 2 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--muted)' }}>Zones shown</span>
-                    <strong style={{ color: 'var(--text)' }}>{data.total_points}</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--muted)' }}>Peak density</span>
-                    <strong style={{ color: 'var(--red)' }}>{data.max_count?.toLocaleString()}</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--muted)' }}>Filter</span>
-                    <strong style={{ color: 'var(--text)' }}>{minCount}+ violations</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--muted)' }}>Coverage</span>
-                    <strong style={{ color: 'var(--text)' }}>BLR metro</strong>
-                  </div>
+              {data ? (
+                <div style={{ fontSize: 12, lineHeight: 2.1 }}>
+                  {[
+                    ['Zones shown', data.total_points],
+                    ['Peak density', data.max_count?.toLocaleString()],
+                    ['Filter', `${minCount}+ violations`],
+                    ['Map style', mapStyle],
+                    ['Coverage', 'BLR metro area'],
+                  ].map(([k, v]) => (
+                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--muted)' }}>{k}</span>
+                      <strong style={{ color: 'var(--text)', textTransform: 'capitalize' }}>{v}</strong>
+                    </div>
+                  ))}
                 </div>
-              )}
+              ) : <div style={{ color: 'var(--muted)', fontSize: 12 }}>Loading…</div>}
             </Card>
 
             <Card>
@@ -326,7 +307,10 @@ export default function Heatmap() {
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
                       {j.junction_name?.replace(/^BTP\d+\s*-\s*/, '')}
                     </span>
-                    <span style={{ color: j.impact_score >= 60 ? 'var(--red)' : j.impact_score >= 40 ? 'var(--amber)' : 'var(--green)', fontWeight: 600, flexShrink: 0, marginLeft: 6 }}>
+                    <span style={{
+                      color: j.impact_score >= 60 ? 'var(--red)' : j.impact_score >= 40 ? 'var(--amber)' : 'var(--green)',
+                      fontWeight: 600, flexShrink: 0, marginLeft: 6,
+                    }}>
                       {j.impact_score}
                     </span>
                   </div>
@@ -337,14 +321,15 @@ export default function Heatmap() {
 
             <Card>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>ℹ️ How to read</div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.7 }}>
-                <p>Each blob = a 1km² grid cell. Size and colour show violation density.</p>
-                <p style={{ marginTop: 6 }}>Hover over any cluster to see exact count and coordinates.</p>
-                <p style={{ marginTop: 6 }}>Teal rings = metro stations. White dots = key areas.</p>
+              <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.8 }}>
+                <p>Real map — zoom and pan freely.</p>
+                <p style={{ marginTop: 4 }}>Each heat blob = violations in a 1km² grid cell.</p>
+                <p style={{ marginTop: 4 }}>Teal circles = metro stations. Hover for name.</p>
+                <p style={{ marginTop: 4 }}>Switch Dark / Street / Satellite above.</p>
+                <p style={{ marginTop: 4 }}>Filter slider cuts low-count noise.</p>
               </div>
             </Card>
           </div>
-
         </div>
       </div>
     </div>

@@ -20,9 +20,9 @@ export default function Login() {
         <div style={{ marginBottom:24 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6 }}>
             <span style={{ fontSize:22 }}>🚔</span>
-            <span style={{ fontSize:18, fontWeight:600, color:'var(--text)' }}>Parking Intelligence</span>
+            <span style={{ fontSize:18, fontWeight:600, color:'var(--text)' }}>ParkingIQ</span>
           </div>
-          <p style={{ color:'var(--muted)', fontSize:13 }}>Bengaluru Traffic Police — Command System</p>
+          <p style={{ color:'var(--muted)', fontSize:13 }}>Traffic Intelligence Platform</p>
         </div>
 
         <form onSubmit={handle}>
