@@ -6,14 +6,14 @@ import { PageHeader, Card, LoadingBox, ScoreBar } from '../components/UI'
 const BENGALURU = [12.9716, 77.5946]
 
 const METRO_STATIONS = [
-  { name: 'Majestic',      lat: 12.9767, lng: 77.5713 },
-  { name: 'MG Road',       lat: 12.9756, lng: 77.6099 },
-  { name: 'Indiranagar',   lat: 12.9784, lng: 77.6408 },
-  { name: 'Rajajinagar',   lat: 12.9919, lng: 77.5511 },
-  { name: 'Hosahalli',     lat: 12.9776, lng: 77.5188 },
-  { name: 'Nagasandra',    lat: 13.0484, lng: 77.5133 },
-  { name: 'Byappanahalli', lat: 12.9926, lng: 77.6478 },
-  { name: 'Vijayanagar',   lat: 12.9673, lng: 77.5310 },
+  { name: 'Majestic',       lat: 12.9767, lng: 77.5713 },
+  { name: 'MG Road',        lat: 12.9756, lng: 77.6099 },
+  { name: 'Indiranagar',    lat: 12.9784, lng: 77.6408 },
+  { name: 'Rajajinagar',    lat: 12.9919, lng: 77.5511 },
+  { name: 'Hosahalli',      lat: 12.9776, lng: 77.5188 },
+  { name: 'Nagasandra',     lat: 13.0484, lng: 77.5133 },
+  { name: 'Byappanahalli',  lat: 12.9926, lng: 77.6478 },
+  { name: 'Vijayanagar',    lat: 12.9673, lng: 77.5310 },
   { name: 'Yelachenahalli', lat: 12.8934, lng: 77.5877 },
 ]
 
@@ -67,7 +67,7 @@ export default function Heatmap() {
   const heatRef   = useRef(null)
   const [ready, setReady]       = useState(false)
   const [minCount, setMinCount] = useState(5)
-  const [mapStyle, setMapStyle] = useState('satellite')
+  const [mapStyle, setMapStyle] = useState('dark')
 
   const { data, isLoading } = useQuery({
     queryKey: ['heatmap', minCount],
@@ -79,11 +79,10 @@ export default function Heatmap() {
     queryFn: () => api.get('/impact/junctions?top_n=8').then(r => r.data),
   })
 
-  // ── Init map ────────────────────────────────────────────────────────────
+  // ── Init Map ────────────────────────────────────────────────────────────
   useEffect(() => {
     loadLeaflet(() => {
-      if (mapRef.current) return          
-      if (!mapDivRef.current) return      
+      if (mapRef.current || !mapDivRef.current) return
 
       const L = window.L
 
@@ -93,8 +92,8 @@ export default function Heatmap() {
         zoomControl: true,
       })
 
-      tileRef.current = L.tileLayer(MAP_TILES[mapStyle].url, {
-        attribution: MAP_TILES[mapStyle].attr,
+      tileRef.current = L.tileLayer(MAP_TILES.dark.url, {
+        attribution: MAP_TILES.dark.attr,
         maxZoom: 19,
       }).addTo(map)
 
@@ -108,9 +107,10 @@ export default function Heatmap() {
       })
 
       mapRef.current = map
+      
+      // Force map layout recalculation immediately before enabling child configurations
+      map.invalidateSize()
       setReady(true)
-
-      setTimeout(() => map.invalidateSize(), 100)
     })
 
     return () => {
@@ -121,67 +121,62 @@ export default function Heatmap() {
         heatRef.current = null
       }
     }
-  }, [])                                  
+  }, [])
 
-  // ── Heatmap layer ───────────────────────────────────────────────────────
+  // ── Heatmap Layer Management ─────────────────────────────────────────────
   useEffect(() => {
     if (!ready || !mapRef.current || !data?.points) return
     const L = window.L
-    if (heatRef.current) mapRef.current.removeLayer(heatRef.current)
+
+    // Ensure map dimensions are completely valid before positioning canvas layers
+    mapRef.current.invalidateSize()
 
     const maxC = data.max_count || 1
+    const sqrtMax = Math.sqrt(maxC)
     
-    // FIX: Linear scaling prevents low-density edges from inflating into giant solid blobs
+    // Explicitly parse values to float/numbers to protect against API string returns
     const pts = data.points.map(p => [
-      p.lat,
-      p.lng,
-      p.count / maxC
+      parseFloat(p.lat), 
+      parseFloat(p.lng), 
+      Math.sqrt(Number(p.count)) / sqrtMax
     ])
 
-    // FIX: Reduced radius and blur values so intense spots remain tight and localized
-    heatRef.current = L.heatLayer(pts, {
-      radius: 15,
-      blur: 12,
-      minOpacity: 0.05,
-      maxZoom: 17,
-      max: 1.0,
-      gradient: {
-        0.1: '#2563eb',   // Minimal
-        0.3: '#06b6d4',   // Low
-        0.5: '#10b981',   // Moderate
-        0.7: '#eab308',   // High
-        0.85: '#f97316',  // Critical
-        1.0: '#ef4444',   // Extreme
-      },
-    }).addTo(mapRef.current)
-
-    const map = mapRef.current
-    map.off('zoomend')
-    map.on('zoomend', () => {
-      const z = map.getZoom()
-      if (heatRef.current) {
-        // Dynamic adjustment so zooming out keeps points legible and zooming in keeps them precise
-        heatRef.current.setOptions({
-          radius: z >= 15 ? 10 : z >= 13 ? 14 : 18,
-          blur: z >= 15 ? 8 : z >= 13 ? 11 : 14
-        })
-        heatRef.current.redraw()
-      }
-    })
+    if (heatRef.current) {
+      // High-performance direct update instead of dismantling/recreating layer
+      heatRef.current.setLatLngs(pts)
+    } else {
+      // Create new heatmap layer instances only once
+      heatRef.current = L.heatLayer(pts, {
+        radius: 30,        
+        blur: 18,
+        minOpacity: 0.4,   
+        maxZoom: 17,
+        max: 1.0,
+        gradient: {
+          '0.1': '#3b82f6',   // Low (Blue)
+          '0.4': '#8b5cf6',   // Medium-Low (Purple)
+          '0.6': '#f59e0b',   // Medium (Amber)
+          '0.8': '#ef4444',   // High (Red)
+          '1.0': '#ffffff'    // Extreme Core (White)
+        },
+      }).addTo(mapRef.current)
+    }
   }, [data, ready])
 
-  // ── Tile style swap ─────────────────────────────────────────────────────
+  // ── Tile Style Swap ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!ready || !mapRef.current) return
     const L = window.L
+    
     if (tileRef.current) mapRef.current.removeLayer(tileRef.current)
+    
     const t = MAP_TILES[mapStyle]
     tileRef.current = L.tileLayer(t.url, { attribution: t.attr, maxZoom: 19 })
     tileRef.current.addTo(mapRef.current)
     
+    // Bring heatmap to front automatically if layer swap occurred
     if (heatRef.current) {
-      mapRef.current.removeLayer(heatRef.current)
-      mapRef.current.addLayer(heatRef.current)
+      heatRef.current.bringToFront?.()
     }
   }, [mapStyle, ready])
 
@@ -239,7 +234,6 @@ export default function Heatmap() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16 }}>
 
           <Card style={{ padding: 0, overflow: 'hidden', position: 'relative', background: '#0d1520' }}>
-
             <div
               ref={mapDivRef}
               style={{ width: '100%', height: 540 }}
@@ -272,7 +266,6 @@ export default function Heatmap() {
               </div>
             )}
 
-            {/* Legend */}
             <div style={{
               position: 'absolute', bottom: 38, right: 12, zIndex: 999,
               background: 'rgba(13,21,32,0.88)', borderRadius: 7,
@@ -280,15 +273,14 @@ export default function Heatmap() {
             }}>
               <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Intensity</div>
               {[
-                ['#ef4444', 'Extreme'],
-                ['#f97316', 'Critical'],
-                ['#eab308', 'High'],
-                ['#10b981', 'Moderate'],
-                ['#06b6d4', 'Low'],
-                ['#2563eb', 'Minimal'],
+                ['#ffffff', 'Extreme'],
+                ['#ef4444', 'Critical'],
+                ['#f59e0b', 'High'],
+                ['#8b5cf6', 'Medium'],
+                ['#3b82f6', 'Minimal'],
               ].map(([c, l]) => (
                 <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: c }} />
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: c, border: c === '#ffffff' ? '1px solid #ccc' : 'none' }} />
                   <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)' }}>{l}</span>
                 </div>
               ))}
