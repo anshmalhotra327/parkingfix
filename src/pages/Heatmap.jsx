@@ -32,7 +32,6 @@ const MAP_TILES = {
   },
 }
 
-// Load Leaflet + leaflet.heat from CDN once, then call cb
 function loadLeaflet(cb) {
   if (window.L && window.L.heatLayer) { cb(); return }
 
@@ -51,26 +50,24 @@ function loadLeaflet(cb) {
 
   addCSS('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css')
   addScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', () => {
-    // Fix Leaflet icon paths broken by Vite
     delete window.L.Icon.Default.prototype._getIconUrl
     window.L.Icon.Default.mergeOptions({
       iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+      shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
     })
     addScript('https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js', cb)
   })
 }
 
 export default function Heatmap() {
-  const mapDivRef    = useRef(null)
-  const mapRef       = useRef(null)   // L.map instance
-  const tileRef      = useRef(null)   // current tile layer
-  const heatRef      = useRef(null)   // L.heatLayer
-  const metroRef     = useRef([])     // metro circle markers
-  const [ready, setReady] = useState(false)
-  const [minCount, setMinCount]   = useState(5)
-  const [mapStyle, setMapStyle]   = useState('dark')
+  const mapDivRef = useRef(null)
+  const mapRef    = useRef(null)
+  const tileRef   = useRef(null)
+  const heatRef   = useRef(null)
+  const [ready, setReady]       = useState(false)
+  const [minCount, setMinCount] = useState(5)
+  const [mapStyle, setMapStyle] = useState('dark')
 
   const { data, isLoading } = useQuery({
     queryKey: ['heatmap', minCount],
@@ -82,64 +79,79 @@ export default function Heatmap() {
     queryFn: () => api.get('/impact/junctions?top_n=8').then(r => r.data),
   })
 
-  // ── Step 1: load Leaflet scripts, then init map ───────────────────────
+  // ── Init map ────────────────────────────────────────────────────────────
+  // KEY FIX: the div must already be visible (non-zero size) when L.map() runs.
+  // We always render the div in the DOM. We call invalidateSize() after init
+  // to handle any edge case where the container was briefly 0-sized.
   useEffect(() => {
     loadLeaflet(() => {
-      if (mapRef.current || !mapDivRef.current) return
+      if (mapRef.current) return          // already initialised
+      if (!mapDivRef.current) return      // div not mounted yet
+
       const L = window.L
+
       const map = L.map(mapDivRef.current, {
-        center: BENGALURU, zoom: 12, zoomControl: true,
+        center: BENGALURU,
+        zoom: 12,
+        zoomControl: true,
       })
 
-      // default dark tile
       tileRef.current = L.tileLayer(MAP_TILES.dark.url, {
-        attribution: MAP_TILES.dark.attr, maxZoom: 19,
+        attribution: MAP_TILES.dark.attr,
+        maxZoom: 19,
       }).addTo(map)
 
-      // metro circles
       METRO_STATIONS.forEach(m => {
-        const c = L.circleMarker([m.lat, m.lng], {
+        L.circleMarker([m.lat, m.lng], {
           radius: 7, fillColor: '#14b8a6', fillOpacity: 0.5,
           color: '#14b8a6', weight: 2, opacity: 0.9,
-        }).addTo(map)
-        c.bindTooltip(`🚇 ${m.name}`, {
-          permanent: false, direction: 'top', className: 'piq-metro-tip',
         })
-        metroRef.current.push(c)
+        .bindTooltip(`🚇 ${m.name}`, { permanent: false, direction: 'top', className: 'piq-tip' })
+        .addTo(map)
       })
 
       mapRef.current = map
       setReady(true)
-    })
-    return () => {
-      // cleanup on unmount
-      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
-    }
-  }, [])
 
-  // ── Step 2: update heatmap layer when data arrives ────────────────────
+      // Force Leaflet to recalculate container size
+      // (needed when navigating from another route — container may have been 0px)
+      setTimeout(() => map.invalidateSize(), 100)
+    })
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove()
+        mapRef.current = null
+        tileRef.current = null
+        heatRef.current = null
+      }
+    }
+  }, [])                                  // run once on mount
+
+  // ── Heatmap layer ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!ready || !mapRef.current || !data?.points) return
     const L = window.L
     if (heatRef.current) mapRef.current.removeLayer(heatRef.current)
 
     const maxC = data.max_count || 1
-    const pts  = data.points.map(p => [p.lat, p.lng, p.count / maxC])
-
-    heatRef.current = L.heatLayer(pts, {
-      radius: 28, blur: 22, maxZoom: 15, max: 1.0,
-      gradient: {
-        0.00: '#0ea5e9',
-        0.25: '#6366f1',
-        0.45: '#f59e0b',
-        0.65: '#ef4444',
-        0.85: '#ff2200',
-        1.00: '#ffffff',
-      },
-    }).addTo(mapRef.current)
+    heatRef.current = L.heatLayer(
+      data.points.map(p => [p.lat, p.lng, p.count / maxC]),
+      {
+        radius: 28, blur: 22, maxZoom: 15, max: 1.0,
+        gradient: {
+          0.00: '#0ea5e9',
+          0.25: '#6366f1',
+          0.45: '#f59e0b',
+          0.65: '#ef4444',
+          0.85: '#ff2200',
+          1.00: '#ffffff',
+        },
+      }
+    ).addTo(mapRef.current)
   }, [data, ready])
 
-  // ── Step 3: swap tile layer on style change ───────────────────────────
+  // ── Tile style swap ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!ready || !mapRef.current) return
     const L = window.L
@@ -147,15 +159,18 @@ export default function Heatmap() {
     const t = MAP_TILES[mapStyle]
     tileRef.current = L.tileLayer(t.url, { attribution: t.attr, maxZoom: 19 })
     tileRef.current.addTo(mapRef.current)
-    tileRef.current.setZIndex(0)
-    if (heatRef.current) heatRef.current.setZIndex && heatRef.current.setZIndex(1)
+    // keep heat layer on top
+    if (heatRef.current) {
+      mapRef.current.removeLayer(heatRef.current)
+      mapRef.current.addLayer(heatRef.current)
+    }
   }, [mapStyle, ready])
 
   return (
     <div>
       <PageHeader
         title="Violation Heatmap"
-        subtitle="Live map of parking violation density across Bengaluru — zoom and pan freely"
+        subtitle="Live map of parking violation density — zoom and pan freely"
         right={
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 11, color: 'var(--muted)' }}>Min:</span>
@@ -180,28 +195,23 @@ export default function Heatmap() {
         }
       />
 
-      {/* Leaflet CSS overrides */}
       <style>{`
-        .piq-metro-tip {
+        .piq-tip {
           background: rgba(13,21,32,0.92) !important;
           border: 1px solid rgba(20,184,166,0.45) !important;
-          color: #e8eaf0 !important;
-          font-size: 12px !important;
-          border-radius: 6px !important;
-          box-shadow: none !important;
+          color: #e8eaf0 !important; font-size: 12px !important;
+          border-radius: 6px !important; box-shadow: none !important;
           padding: 4px 9px !important;
         }
-        .piq-metro-tip::before { display:none !important; }
+        .piq-tip::before { display: none !important; }
         .leaflet-control-zoom a {
-          background: #1a1d27 !important;
-          color: #e8eaf0 !important;
+          background: #1a1d27 !important; color: #e8eaf0 !important;
           border-color: rgba(255,255,255,0.12) !important;
         }
         .leaflet-control-zoom a:hover { background: #22263a !important; }
         .leaflet-control-attribution {
           background: rgba(13,21,32,0.6) !important;
-          color: rgba(255,255,255,0.3) !important;
-          font-size: 9px !important;
+          color: rgba(255,255,255,0.3) !important; font-size: 9px !important;
         }
         .leaflet-control-attribution a { color: rgba(255,255,255,0.4) !important; }
       `}</style>
@@ -209,15 +219,24 @@ export default function Heatmap() {
       <div style={{ padding: 24 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16 }}>
 
-          {/* Map container */}
           <Card style={{ padding: 0, overflow: 'hidden', position: 'relative', background: '#0d1520' }}>
-            {!ready && <LoadingBox h={540} />}
 
-            {/* Leaflet mounts into this div — always rendered so ref is stable */}
+            {/* Map div — ALWAYS in DOM with fixed height so Leaflet gets real dimensions */}
             <div
               ref={mapDivRef}
-              style={{ width: '100%', height: 540, display: ready ? 'block' : 'none' }}
+              style={{ width: '100%', height: 540 }}
             />
+
+            {/* Spinner shown on top while Leaflet scripts load */}
+            {!ready && (
+              <div style={{
+                position: 'absolute', inset: 0, display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                background: '#0d1520', zIndex: 500,
+              }}>
+                <LoadingBox h={540} />
+              </div>
+            )}
 
             {/* Fetching overlay */}
             {isLoading && ready && (
@@ -230,10 +249,10 @@ export default function Heatmap() {
                 <span style={{
                   display: 'inline-block', width: 10, height: 10,
                   border: '2px solid var(--accent)', borderTopColor: 'transparent',
-                  borderRadius: '50%', animation: 'mapspin 0.8s linear infinite',
+                  borderRadius: '50%', animation: 'piqspin 0.8s linear infinite',
                 }} />
                 Updating…
-                <style>{`@keyframes mapspin { to { transform:rotate(360deg); } }`}</style>
+                <style>{`@keyframes piqspin { to { transform: rotate(360deg); } }`}</style>
               </div>
             )}
 
@@ -245,11 +264,11 @@ export default function Heatmap() {
             }}>
               <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Intensity</div>
               {[
-                ['#ff2200','Extreme'],
-                ['#ef4444','Critical'],
-                ['#f59e0b','High'],
-                ['#6366f1','Low'],
-                ['#0ea5e9','Minimal'],
+                ['#ff2200', 'Extreme'],
+                ['#ef4444', 'Critical'],
+                ['#f59e0b', 'High'],
+                ['#6366f1', 'Low'],
+                ['#0ea5e9', 'Minimal'],
               ].map(([c, l]) => (
                 <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <div style={{ width: 10, height: 10, borderRadius: '50%', background: c }} />
@@ -264,7 +283,6 @@ export default function Heatmap() {
               </div>
             </div>
 
-            {/* Zone count */}
             {data && (
               <div style={{
                 position: 'absolute', bottom: 38, left: 12, zIndex: 999,
@@ -284,11 +302,11 @@ export default function Heatmap() {
               {data ? (
                 <div style={{ fontSize: 12, lineHeight: 2.1 }}>
                   {[
-                    ['Zones shown', data.total_points],
-                    ['Peak density', data.max_count?.toLocaleString()],
-                    ['Filter', `${minCount}+ violations`],
-                    ['Map style', mapStyle],
-                    ['Coverage', 'BLR metro area'],
+                    ['Zones shown',   data.total_points],
+                    ['Peak density',  data.max_count?.toLocaleString()],
+                    ['Filter',        `${minCount}+ violations`],
+                    ['Map style',     mapStyle],
+                    ['Coverage',      'BLR metro area'],
                   ].map(([k, v]) => (
                     <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: 'var(--muted)' }}>{k}</span>
@@ -326,7 +344,6 @@ export default function Heatmap() {
                 <p style={{ marginTop: 4 }}>Each heat blob = violations in a 1km² grid cell.</p>
                 <p style={{ marginTop: 4 }}>Teal circles = metro stations. Hover for name.</p>
                 <p style={{ marginTop: 4 }}>Switch Dark / Street / Satellite above.</p>
-                <p style={{ marginTop: 4 }}>Filter slider cuts low-count noise.</p>
               </div>
             </Card>
           </div>
