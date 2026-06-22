@@ -5,7 +5,7 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContai
 
 const COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#14b8a6','#f97316','#ec4899']
 const MONTHS = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-const TT = { contentStyle:{ background:'#1a1d27', border:'1px solid rgba(255,255,255,0.08)', borderRadius:7, fontSize:12 }, labelStyle:{ color:'#8892a4' } }
+const TT = { contentStyle:{ background:'#1a1d27', border:'1px solid rgba(255,255,255,0.08)', borderRadius:7, fontSize:12 }, labelStyle:{ color:'#8892a4' }, itemStyle:{ color:'#ffffff' } }
 
 export default function Dashboard() {
   const { data, isLoading, error } = useQuery({ queryKey:['overview'], queryFn: () => api.get('/analytics/overview').then(r=>r.data), refetchInterval:60000 })
