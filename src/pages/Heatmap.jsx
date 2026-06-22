@@ -6,14 +6,14 @@ import { PageHeader, Card, LoadingBox, ScoreBar } from '../components/UI'
 const BENGALURU = [12.9716, 77.5946]
 
 const METRO_STATIONS = [
-  { name: 'Majestic',       lat: 12.9767, lng: 77.5713 },
-  { name: 'MG Road',        lat: 12.9756, lng: 77.6099 },
-  { name: 'Indiranagar',    lat: 12.9784, lng: 77.6408 },
-  { name: 'Rajajinagar',    lat: 12.9919, lng: 77.5511 },
-  { name: 'Hosahalli',      lat: 12.9776, lng: 77.5188 },
-  { name: 'Nagasandra',     lat: 13.0484, lng: 77.5133 },
-  { name: 'Byappanahalli',  lat: 12.9926, lng: 77.6478 },
-  { name: 'Vijayanagar',    lat: 12.9673, lng: 77.5310 },
+  { name: 'Majestic',      lat: 12.9767, lng: 77.5713 },
+  { name: 'MG Road',       lat: 12.9756, lng: 77.6099 },
+  { name: 'Indiranagar',   lat: 12.9784, lng: 77.6408 },
+  { name: 'Rajajinagar',   lat: 12.9919, lng: 77.5511 },
+  { name: 'Hosahalli',     lat: 12.9776, lng: 77.5188 },
+  { name: 'Nagasandra',    lat: 13.0484, lng: 77.5133 },
+  { name: 'Byappanahalli', lat: 12.9926, lng: 77.6478 },
+  { name: 'Vijayanagar',   lat: 12.9673, lng: 77.5310 },
   { name: 'Yelachenahalli', lat: 12.8934, lng: 77.5877 },
 ]
 
@@ -80,13 +80,10 @@ export default function Heatmap() {
   })
 
   // ── Init map ────────────────────────────────────────────────────────────
-  // KEY FIX: the div must already be visible (non-zero size) when L.map() runs.
-  // We always render the div in the DOM. We call invalidateSize() after init
-  // to handle any edge case where the container was briefly 0-sized.
   useEffect(() => {
     loadLeaflet(() => {
-      if (mapRef.current) return          // already initialised
-      if (!mapDivRef.current) return      // div not mounted yet
+      if (mapRef.current) return          
+      if (!mapDivRef.current) return      
 
       const L = window.L
 
@@ -96,8 +93,8 @@ export default function Heatmap() {
         zoomControl: true,
       })
 
-      tileRef.current = L.tileLayer(MAP_TILES.dark.url, {
-        attribution: MAP_TILES.dark.attr,
+      tileRef.current = L.tileLayer(MAP_TILES[mapStyle].url, {
+        attribution: MAP_TILES[mapStyle].attr,
         maxZoom: 19,
       }).addTo(map)
 
@@ -113,8 +110,6 @@ export default function Heatmap() {
       mapRef.current = map
       setReady(true)
 
-      // Force Leaflet to recalculate container size
-      // (needed when navigating from another route — container may have been 0px)
       setTimeout(() => map.invalidateSize(), 100)
     })
 
@@ -126,7 +121,7 @@ export default function Heatmap() {
         heatRef.current = null
       }
     }
-  }, [])                                  // run once on mount
+  }, [])                                  
 
   // ── Heatmap layer ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -135,48 +130,44 @@ export default function Heatmap() {
     if (heatRef.current) mapRef.current.removeLayer(heatRef.current)
 
     const maxC = data.max_count || 1
-    // Normalise so even low-count zones are visible
-    // Use sqrt to compress range — prevents one mega-hotspot drowning everything
-    const sqrtMax = Math.sqrt(maxC)
+    
+    // FIX: Linear scaling prevents low-density edges from inflating into giant solid blobs
     const pts = data.points.map(p => [
-  p.lat,
-  p.lng,
-  Math.pow(p.count / maxC, 0.7)
-])
-const topPoints = [...data.points]
-  .sort((a, b) => b.count - a.count)
-  .slice(0, 20)
+      p.lat,
+      p.lng,
+      p.count / maxC
+    ])
 
+    // FIX: Reduced radius and blur values so intense spots remain tight and localized
     heatRef.current = L.heatLayer(pts, {
-  radius: 22,
-  blur: 18,
-  minOpacity: 0.15,
-  maxZoom: 17,
-  max: 1.0,
-  gradient: {
-    0.15: '#2563eb',
-    0.35: '#06b6d4',
-    0.55: '#10b981',
-    0.72: '#eab308',
-    0.88: '#f97316',
-    1.0: '#ef4444',
-  },
-}).addTo(mapRef.current)
-const map = mapRef.current
+      radius: 15,
+      blur: 12,
+      minOpacity: 0.05,
+      maxZoom: 17,
+      max: 1.0,
+      gradient: {
+        0.1: '#2563eb',   // Minimal
+        0.3: '#06b6d4',   // Low
+        0.5: '#10b981',   // Moderate
+        0.7: '#eab308',   // High
+        0.85: '#f97316',  // Critical
+        1.0: '#ef4444',   // Extreme
+      },
+    }).addTo(mapRef.current)
 
-map.off('zoomend')
-
-map.on('zoomend', () => {
-  const z = map.getZoom()
-
-  if (heatRef.current) {
-    heatRef.current.setOptions({
-      radius: z >= 15 ? 15 : z >= 13 ? 20 : 25
+    const map = mapRef.current
+    map.off('zoomend')
+    map.on('zoomend', () => {
+      const z = map.getZoom()
+      if (heatRef.current) {
+        // Dynamic adjustment so zooming out keeps points legible and zooming in keeps them precise
+        heatRef.current.setOptions({
+          radius: z >= 15 ? 10 : z >= 13 ? 14 : 18,
+          blur: z >= 15 ? 8 : z >= 13 ? 11 : 14
+        })
+        heatRef.current.redraw()
+      }
     })
-
-    heatRef.current.redraw()
-  }
-})
   }, [data, ready])
 
   // ── Tile style swap ─────────────────────────────────────────────────────
@@ -187,7 +178,7 @@ map.on('zoomend', () => {
     const t = MAP_TILES[mapStyle]
     tileRef.current = L.tileLayer(t.url, { attribution: t.attr, maxZoom: 19 })
     tileRef.current.addTo(mapRef.current)
-    // keep heat layer on top
+    
     if (heatRef.current) {
       mapRef.current.removeLayer(heatRef.current)
       mapRef.current.addLayer(heatRef.current)
@@ -249,13 +240,11 @@ map.on('zoomend', () => {
 
           <Card style={{ padding: 0, overflow: 'hidden', position: 'relative', background: '#0d1520' }}>
 
-            {/* Map div — ALWAYS in DOM with fixed height so Leaflet gets real dimensions */}
             <div
               ref={mapDivRef}
               style={{ width: '100%', height: 540 }}
             />
 
-            {/* Spinner shown on top while Leaflet scripts load */}
             {!ready && (
               <div style={{
                 position: 'absolute', inset: 0, display: 'flex',
@@ -266,7 +255,6 @@ map.on('zoomend', () => {
               </div>
             )}
 
-            {/* Fetching overlay */}
             {isLoading && ready && (
               <div style={{
                 position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
@@ -292,11 +280,12 @@ map.on('zoomend', () => {
             }}>
               <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Intensity</div>
               {[
-                ['#ff2200', 'Extreme'],
-                ['#ef4444', 'Critical'],
-                ['#f59e0b', 'High'],
-                ['#6366f1', 'Low'],
-                ['#0ea5e9', 'Minimal'],
+                ['#ef4444', 'Extreme'],
+                ['#f97316', 'Critical'],
+                ['#eab308', 'High'],
+                ['#10b981', 'Moderate'],
+                ['#06b6d4', 'Low'],
+                ['#2563eb', 'Minimal'],
               ].map(([c, l]) => (
                 <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <div style={{ width: 10, height: 10, borderRadius: '50%', background: c }} />
