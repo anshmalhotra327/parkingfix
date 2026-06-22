@@ -91,7 +91,8 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={viol} layout="vertical" barSize={14}>
                 <XAxis type="number" tick={{ fill:'#8892a4', fontSize:10 }} axisLine={false} tickLine={false} tickFormatter={v=>`${(v/1000).toFixed(0)}K`} />
-                <YAxis type="category" dataKey="name" tick={{ fill:'#8892a4', fontSize:10 }} axisLine={false} tickLine={false} width={90} />
+                {/* Fixed overlapping by increasing width to 130 to fully accommodate long text descriptions */}
+                <YAxis type="category" dataKey="name" tick={{ fill:'#8892a4', fontSize:10 }} axisLine={false} tickLine={false} width={130} />
                 <Tooltip {...TT} formatter={v=>[v.toLocaleString()]} />
                 <Bar dataKey="val" fill="#10b981" radius={[0,3,3,0]} />
               </BarChart>

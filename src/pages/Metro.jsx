@@ -4,9 +4,22 @@ import { api } from '../utils/api'
 import { PageHeader, Card, CardTitle, LoadingBox, ErrorBox, Grid, StatCard, ScoreBar, RiskBadge } from '../components/UI'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
+// Tooltip styles optimized for maximum contrast against the dark background
 const TT = {
-  contentStyle: { background: '#1a1d27', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 7, fontSize: 12 },
-  labelStyle: { color: '#8892a4' },
+  contentStyle: { 
+    background: '#1a1d27', 
+    border: '1px solid rgba(255,255,255,0.15)', 
+    borderRadius: 7, 
+    fontSize: 12 
+  },
+  labelStyle: { 
+    color: '#94a3b8', 
+    fontWeight: 600, 
+    marginBottom: 4 
+  },
+  itemStyle: { 
+    color: '#f8fafc' 
+  },
 }
 
 const RISK_COLOR = { high: '#ef4444', medium: '#f59e0b', low: '#10b981' }
@@ -132,9 +145,9 @@ export default function Metro() {
                 <Card>
                   <CardTitle>Risk Thresholds at {fmtRadius(radius)}</CardTitle>
                   {[
-                    { level:'high',   color:'var(--red)',   range:`> ${hiThresh}`,                      action:'Permanent enforcement post recommended' },
-                    { level:'medium', color:'var(--amber)', range:`${midThresh} – ${hiThresh}`,          action:'Patrol during peak metro hours' },
-                    { level:'low',    color:'var(--green)', range:`< ${midThresh}`,                      action:'Standard patrol schedule' },
+                    { level:'high',   color:'var(--red)',   range:`> ${hiThresh}`,      action:'Permanent enforcement post recommended' },
+                    { level:'medium', color:'var(--amber)', range:`${midThresh} – ${hiThresh}`,   action:'Patrol during peak metro hours' },
+                    { level:'low',    color:'var(--green)', range:`< ${midThresh}`,      action:'Standard patrol schedule' },
                   ].map(r => (
                     <div key={r.level} style={{ display:'flex', gap:10, padding:'10px 0', borderBottom:'1px solid var(--border)' }}>
                       <div style={{ width:3, background:r.color, borderRadius:2, flexShrink:0, minHeight:44 }} />
