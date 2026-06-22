@@ -67,7 +67,7 @@ export default function Heatmap() {
   const heatRef   = useRef(null)
   const [ready, setReady]       = useState(false)
   const [minCount, setMinCount] = useState(5)
-  const [mapStyle, setMapStyle] = useState('dark')
+  const [mapStyle, setMapStyle] = useState('satellite')
 
   const { data, isLoading } = useQuery({
     queryKey: ['heatmap', minCount],
@@ -138,23 +138,45 @@ export default function Heatmap() {
     // Normalise so even low-count zones are visible
     // Use sqrt to compress range — prevents one mega-hotspot drowning everything
     const sqrtMax = Math.sqrt(maxC)
-    const pts = data.points.map(p => [p.lat, p.lng, Math.sqrt(p.count) / sqrtMax])
+    const pts = data.points.map(p => [
+  p.lat,
+  p.lng,
+  Math.pow(p.count / maxC, 0.7)
+])
+const topPoints = [...data.points]
+  .sort((a, b) => b.count - a.count)
+  .slice(0, 20)
 
     heatRef.current = L.heatLayer(pts, {
-      radius: 35,        // larger blobs — visible at zoom 12
-      blur: 25,
-      minOpacity: 0.4,   // KEY: never fully transparent even for low-count zones
-      maxZoom: 17,
-      max: 1.0,
-      gradient: {
-        0.0:  '#3b82f6',   // blue   — low
-        0.3:  '#8b5cf6',   // purple — medium-low
-        0.5:  '#f59e0b',   // amber  — medium
-        0.7:  '#ef4444',   // red    — high
-        0.9:  '#ff2200',   // bright red — very high
-        1.0:  '#ffffff',   // white core — extreme
-      },
-    }).addTo(mapRef.current)
+  radius: 22,
+  blur: 18,
+  minOpacity: 0.15,
+  maxZoom: 17,
+  max: 1.0,
+  gradient: {
+    0.15: '#2563eb',
+    0.35: '#06b6d4',
+    0.55: '#10b981',
+    0.72: '#eab308',
+    0.88: '#f97316',
+    1.0: '#ef4444',
+  },
+}).addTo(mapRef.current)
+const map = mapRef.current
+
+map.off('zoomend')
+
+map.on('zoomend', () => {
+  const z = map.getZoom()
+
+  if (heatRef.current) {
+    heatRef.current.setOptions({
+      radius: z >= 15 ? 15 : z >= 13 ? 20 : 25
+    })
+
+    heatRef.current.redraw()
+  }
+})
   }, [data, ready])
 
   // ── Tile style swap ─────────────────────────────────────────────────────
