@@ -286,7 +286,12 @@ export default function Heatmap() {
         }
       `}</style>
 
-      <div style={{ padding: '12px md:24px' }}>
+      <div
+  style={{
+    padding: '16px 24px',
+    marginLeft: 8
+  }}
+>
         <div className="layout-grid">
 
           {/* FIX: Added zIndex: 0 here to shield your mobile sidebar layout from Leaflet's bleeding overlay effects */}
