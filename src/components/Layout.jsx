@@ -14,6 +14,7 @@ import {
   FaRadiation,
   FaProjectDiagram
 } from "react-icons/fa";
+
 const NAV = [
   { to:'/', icon:<FaChartBar />, label:'Dashboard' },
   { to:'/heatmap', icon:<FaMapMarkedAlt />, label:'Heatmap' },
@@ -33,6 +34,15 @@ export default function Layout() {
   const [unread, setUnread] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const location = useLocation()
+
+  // --- FORCE REMOVE POLICE CAR FAVICON ---
+  useEffect(() => {
+    const link = document.querySelector("link[rel~='icon']");
+    if (link) {
+      link.remove();
+    }
+  }, []);
+  // ----------------------------------------
 
   useEffect(() => {
     api.get('/alerts/unread').then(r => setUnread(r.data.length)).catch(() => {})
@@ -77,40 +87,28 @@ export default function Layout() {
           <nav style={{ flex:1, overflowY:'auto', padding:'8px' }}>
           {NAV.map(n => (
             <NavLink
-  key={n.to}
-  to={n.to}
-  end={n.to === '/'}
-  style={({ isActive }) => ({
-    display:'flex',
-    alignItems:'center',
-    gap:9,
-    padding:'10px 12px',
-
-    borderRadius:10,
-
-    marginBottom:4,
-    textDecoration:'none',
-    fontSize:13,
-
-    fontWeight:500,
-
-    color: isActive ? '#fff' : 'var(--muted)',
-    background: isActive ? 'var(--accent)' : 'transparent',
-
-    boxShadow: isActive
-      ? '0 2px 8px rgba(0,0,0,0.15)'
-      : 'none',
-
-    position:'relative',
-  })}
->
-             <span style={{
-  fontSize:16,
-  display:'flex',
-  alignItems:'center'
-}}>
-  {n.icon}
-</span>
+              key={n.to}
+              to={n.to}
+              end={n.to === '/'}
+              style={({ isActive }) => ({
+                display:'flex',
+                alignItems:'center',
+                gap:9,
+                padding:'10px 12px',
+                borderRadius:10,
+                marginBottom:4,
+                textDecoration:'none',
+                fontSize:13,
+                fontWeight:500,
+                color: isActive ? '#fff' : 'var(--muted)',
+                background: isActive ? 'var(--accent)' : 'transparent',
+                boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.15)' : 'none',
+                position:'relative',
+              })}
+            >
+              <span style={{ fontSize:16, display:'flex', alignItems:'center' }}>
+                {n.icon}
+              </span>
               {n.label}
               {n.to === '/alerts' && unread > 0 && (
                 <span style={{ marginLeft:'auto', background:'var(--red)', color:'#fff', fontSize:10, padding:'1px 5px', borderRadius:10 }}>{unread}</span>
