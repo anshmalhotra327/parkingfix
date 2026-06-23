@@ -286,6 +286,7 @@ export default function Heatmap() {
         }
       `}</style>
 
+
       <div style={{ padding: 24 }}>
         <div className="layout-grid">
 
