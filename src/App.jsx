@@ -13,6 +13,8 @@ import Violations from './pages/Violations'
 import Metro from './pages/Metro'
 import Alerts from './pages/Alerts'
 import Predict from './pages/Predict'
+import Recidivism from './pages/Recidivism'
+import Cascade from './pages/Cascade'
 import './index.css'
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30000 } } })
@@ -39,7 +41,9 @@ export default function App() {
             <Route path="violations"element={<Violations />} />
             <Route path="metro"     element={<Metro />} />
             <Route path="alerts"    element={<Alerts />} />
-            <Route path="predict"   element={<Predict />} />
+            <Route path="predict"    element={<Predict />} />
+            <Route path="recidivism" element={<Recidivism />} />
+            <Route path="cascade"    element={<Cascade />} />
           </Route>
         </Routes>
       </BrowserRouter>

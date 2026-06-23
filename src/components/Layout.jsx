@@ -10,7 +10,9 @@ import {
   FaExclamationTriangle,
   FaSubway,
   FaBrain,
-  FaBell
+  FaBell,
+  FaRadiation,
+  FaProjectDiagram
 } from "react-icons/fa";
 const NAV = [
   { to:'/', icon:<FaChartBar />, label:'Dashboard' },
@@ -21,7 +23,9 @@ const NAV = [
   { to:'/offenders', icon:<FaExclamationTriangle />, label:'Repeat Offenders' },
   { to:'/metro', icon:<FaSubway />, label:'Metro Zones' },
   { to:'/predict', icon:<FaBrain />, label:'Predictive Analytics' },
-  { to:'/alerts', icon:<FaBell />, label:'Alerts' },
+  { to:'/alerts',     icon:<FaBell />,          label:'Alerts' },
+  { to:'/recidivism', icon:<FaRadiation />,     label:'Recidivism Risk' },
+  { to:'/cascade',    icon:<FaProjectDiagram />, label:'Cascade Map' },
 ];
 
 export default function Layout() {
