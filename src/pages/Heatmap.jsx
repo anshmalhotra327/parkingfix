@@ -3,10 +3,10 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../utils/api'
 import { PageHeader, Card, LoadingBox, ScoreBar } from '../components/UI'
 
-const BENGALURU = [12.9716, 77.5946]
+const BENGALURU = { lat: 12.9716, lng: 77.5946 }
 
 const METRO_STATIONS = [
-  { name: 'Majestic',       lat: 12.9767, lng: 77.5713 },
+  { name: 'Majestic',      lat: 12.9767, lng: 77.5713 },
   { name: 'MG Road',        lat: 12.9756, lng: 77.6099 },
   { name: 'Indiranagar',    lat: 12.9784, lng: 77.6408 },
   { name: 'Rajajinagar',    lat: 12.9919, lng: 77.5511 },
@@ -17,54 +17,33 @@ const METRO_STATIONS = [
   { name: 'Yelachenahalli', lat: 12.8934, lng: 77.5877 },
 ]
 
-const MAP_TILES = {
-  dark: {
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attr: '&copy; <a href="https://carto.com">CARTO</a> &copy; <a href="https://openstreetmap.org">OSM</a>',
-  },
-  street: {
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attr: '&copy; <a href="https://carto.com">CARTO</a>',
-  },
-  satellite: {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attr: '&copy; Esri',
-  },
+// MapmyIndia Mappls Native Style Mapping
+const MAP_STYLES = {
+  dark: 'submission',       // Dark / Night view
+  street: 'standard',     // Standard colorful street layout
+  satellite: 'hybrid'      // High-res satellite imagery
 }
 
-function loadLeaflet(cb) {
-  if (window.L && window.L.heatLayer) { cb(); return }
+function loadMappls(cb) {
+  if (window.mappls && window.mappls.Heatmap) { cb(); return }
 
-  const addCSS = href => {
-    if (!document.querySelector(`link[href="${href}"]`)) {
-      const l = document.createElement('link')
-      l.rel = 'stylesheet'; l.href = href
-      document.head.appendChild(l)
-    }
-  }
   const addScript = (src, next) => {
-    if (document.querySelector(`script[src="${src}"]`)) { next(); return }
+    if (document.querySelector(`script[src*="${src.split('?')[0]}"]`)) { next(); return }
     const s = document.createElement('script')
     s.src = src; s.onload = next; document.head.appendChild(s)
   }
 
-  addCSS('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css')
-  addScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', () => {
-    delete window.L.Icon.Default.prototype._getIconUrl
-    window.L.Icon.Default.mergeOptions({
-      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-      iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-      shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-    })
-    addScript('https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js', cb)
-  })
+  // Injecting MapmyIndia main Vector SDK along with the native WebGL Heatmap Plugin
+  // Note: Replace "YOUR_MAPMYINDIA_API_KEY" with your actual Mappls key/token if needed, or pass it via client header keys.
+  const API_KEY = "YOUR_MAPMYINDIA_API_KEY";
+  addScript(`https://apis.mappls.com/advancedmaps/api/v1/${API_KEY}/map_sdk?layer=vector&v=3.0&plugins=heatmap`, cb)
 }
 
 export default function Heatmap() {
   const mapDivRef = useRef(null)
   const mapRef    = useRef(null)
-  const tileRef   = useRef(null)
   const heatRef   = useRef(null)
+  const markersRef = useRef([])
   const [ready, setReady]       = useState(false)
   const [minCount, setMinCount] = useState(5)
   const [mapStyle, setMapStyle] = useState('dark')
@@ -79,150 +58,104 @@ export default function Heatmap() {
     queryFn: () => api.get('/impact/junctions?top_n=8').then(r => r.data),
   })
 
-  // ── Init map ────────────────────────────────────────────────────────────
+  // ── Init Mappls Instance ──────────────────────────────────────────────────
   useEffect(() => {
-    loadLeaflet(() => {
+    loadMappls(() => {
       if (mapRef.current || !mapDivRef.current) return
 
-      const L = window.L
+      const mapplsObj = window.mappls
 
-      const map = L.map(mapDivRef.current, {
-        center: BENGALURU,
+      const map = new mapplsObj.Map(mapDivRef.current, {
+        center: [BENGALURU.lat, BENGALURU.lng],
         zoom: 12,
         zoomControl: true,
+        style: MAP_STYLES.dark
       })
 
-      tileRef.current = L.tileLayer(MAP_TILES.dark.url, {
-        attribution: MAP_TILES.dark.attr,
-        maxZoom: 19,
-      }).addTo(map)
-
-      METRO_STATIONS.forEach(m => {
-        L.circleMarker([m.lat, m.lng], {
-          radius: 7, fillColor: '#14b8a6', fillOpacity: 0.5,
-          color: '#14b8a6', weight: 2, opacity: 0.9,
+      map.addListener('load', () => {
+        // Render Metro Station Markers using Mappls Canvas layers
+        METRO_STATIONS.forEach(m => {
+          const marker = new mapplsObj.Marker({
+            map: map,
+            position: { lat: m.lat, lng: m.lng },
+            icon_url: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png', // Reusing asset fallback
+            width: 20,
+            height: 30,
+            popupHtml: `<div class="piq-tip" style="color:#fff; padding:4px;">🚇 ${m.name}</div>`
+          })
+          markersRef.current.push(marker)
         })
-        .bindTooltip(`🚇 ${m.name}`, { permanent: false, direction: 'top', className: 'piq-tip' })
-        .addTo(map)
-      })
 
-      mapRef.current = map
-      map.invalidateSize()
-      setReady(true)
+        mapRef.current = map
+        setReady(true)
+      })
     })
 
     return () => {
       if (mapRef.current) {
-        mapRef.current.remove()
+        // Clean up memory leaks from Canvas frames
+        try {
+          if (heatRef.current && heatRef.current.remove) heatRef.current.remove()
+          markersRef.current.forEach(m => m.setMap(null))
+        } catch (e) { console.error(e) }
         mapRef.current = null
-        tileRef.current = null
         heatRef.current = null
+        markersRef.current = []
       }
     }
   }, [])
 
-  // ── Heatmap layer with Dynamic Zoom Rescaling ───────────────────────────
+  // ── Native Vector Heatmap Layer ──────────────────────────────────────────
   useEffect(() => {
     if (!ready || !mapRef.current || !data?.points) return
-    const L = window.L
+    const mapplsObj = window.mappls
 
-    mapRef.current.invalidateSize()
-
-    // Helper to calculate smart configurations per zoom level to maintain structural context
-    const getHeatSettings = (zoom) => {
-      let radius = 25
-      let blur = 15
-      let maxIntensity = 1.0
-
-      if (zoom >= 16) {
-        radius = 75; blur = 35; maxIntensity = 0.2 // Spreads point definitions wide when deep zoomed in
-      } else if (zoom >= 14) {
-        radius = 50; blur = 25; maxIntensity = 0.5 
-      } else if (zoom <= 11) {
-        radius = 14; blur = 10; maxIntensity = 2.8 // Prevents color bleeding when zooming out
-      }
-      return { radius, blur, max: maxIntensity }
+    // Formats points to Mappls specification GeoJSON collection
+    const geoJsonData = {
+      type: "FeatureCollection",
+      features: data.points.map(p => ({
+        type: "Feature",
+        properties: { weight: parseFloat(p.count) },
+        geometry: { type: "Point", coordinates: [parseFloat(p.lng), parseFloat(p.lat)] }
+      }))
     }
-
-    const maxC = data.max_count || 1
-    const sqrtMax = Math.sqrt(maxC)
-    
-    const pts = data.points.map(p => [
-      parseFloat(p.lat), 
-      parseFloat(p.lng), 
-      Math.sqrt(Number(p.count)) / sqrtMax
-    ])
-
-    const currentZoom = mapRef.current.getZoom()
-    const settings = getHeatSettings(currentZoom)
 
     if (heatRef.current) {
-      heatRef.current.setLatLngs(pts)
-      heatRef.current.setOptions({
-        radius: settings.radius,
-        blur: settings.blur,
-        max: settings.max
-      })
+      // If the heatmap layer already exists, update its datasets directly
+      heatRef.current.setData(geoJsonData)
     } else {
-      heatRef.current = L.heatLayer(pts, {
-        radius: settings.radius,
-        blur: settings.blur,
-        minOpacity: 0.35,   
-        maxZoom: 18,
-        max: settings.max,
-        gradient: {
-          '0.1': '#3b82f6',   // Low
-          '0.4': '#8b5cf6',   // Med-Low
-          '0.6': '#f59e0b',   // Med
-          '0.8': '#ef4444',   // High
-          '1.0': '#ffffff'    // Extreme Core
-        },
-      }).addTo(mapRef.current)
-    }
-
-    // Capture zoom adjustments on-the-fly
-    const handleZoom = () => {
-      if (!heatRef.current || !mapRef.current) return
-      const newZoom = mapRef.current.getZoom()
-      const newSettings = getHeatSettings(newZoom)
-      
-      heatRef.current.setOptions({
-        radius: newSettings.radius,
-        blur: newSettings.blur,
-        max: newSettings.max
+      // Initialize optimized WebGL canvas engine for smooth spatial operations
+      heatRef.current = new mapplsObj.Heatmap({
+        map: mapRef.current,
+        data: geoJsonData,
+        radius: 18,
+        opacity: 0.85,
+        property: "weight",
+        gradient: [
+          'rgba(59, 130, 246, 0)',   // Transparent core
+          '#3b82f6',                 // Minimal
+          '#8b5cf6',                 // Medium
+          '#f59e0b',                 // High
+          '#ef4444',                 // Critical
+          '#ffffff'                  // Extreme Core
+        ]
       })
-    }
-
-    mapRef.current.on('zoomend', handleZoom)
-
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.off('zoomend', handleZoom)
-      }
     }
   }, [data, ready])
 
-  // ── Tile style swap ─────────────────────────────────────────────────────
+  // ── Style changes directly via Mappls core engine ────────────────────────
   useEffect(() => {
     if (!ready || !mapRef.current) return
-    const L = window.L
-    if (tileRef.current) mapRef.current.removeLayer(tileRef.current)
-    const t = MAP_TILES[mapStyle]
-    tileRef.current = L.tileLayer(t.url, { attribution: t.attr, maxZoom: 19 })
-    tileRef.current.addTo(mapRef.current)
-    
-    if (heatRef.current) {
-      heatRef.current.bringToFront?.()
-    }
+    const targetStyle = MAP_STYLES[mapStyle] || MAP_STYLES.dark
+    mapRef.current.setStyle(targetStyle)
   }, [mapStyle, ready])
 
   return (
     <div>
       <PageHeader
         title="Violation Heatmap"
-        subtitle="Live map of parking violation density — zoom and pan freely"
+        subtitle="Live map of parking violation density — powered by MapmyIndia"
         right={
-          /* Mobile fix: Added dynamic flex wrapping style with maximum horizontal scroll support */
           <div className="map-controls-tray" style={{ 
             display: 'flex', 
             alignItems: 'center', 
@@ -255,38 +188,21 @@ export default function Heatmap() {
       />
 
       <style>{`
-        /* Responsive CSS utilities */
         .piq-tip {
           background: rgba(13,21,32,0.92) !important;
           border: 1px solid rgba(20,184,166,0.45) !important;
           color: #e8eaf0 !important; font-size: 12px !important;
-          border-radius: 6px !important; box-shadow: none !important;
-          padding: 4px 9px !important;
+          border-radius: 6px !important; padding: 4px 9px !important;
         }
-        .piq-tip::before { display: none !important; }
-        .leaflet-control-zoom a {
-          background: #1a1d27 !important; color: #e8eaf0 !important;
-          border-color: rgba(255,255,255,0.12) !important;
-        }
-        .leaflet-control-zoom a:hover { background: #22263a !important; }
-        .leaflet-control-attribution {
-          background: rgba(13,21,32,0.6) !important;
-          color: rgba(255,255,255,0.3) !important; font-size: 9px !important;
-        }
-        .leaflet-control-attribution a { color: rgba(255,255,255,0.4) !important; }
-        
-        .map-controls-tray::-webkit-scrollbar { display: none; } /* Hide track lines on mobile interfaces */
+        .map-controls-tray::-webkit-scrollbar { display: none; } 
         
         .layout-grid {
           display: grid;
           grid-template-columns: 1fr 260px;
           gap: 16px;
         }
-
         @media (max-width: 900px) {
-          .layout-grid {
-            grid-template-columns: 1fr;
-          }
+          .layout-grid { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -344,12 +260,6 @@ export default function Heatmap() {
                   <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)' }}>{l}</span>
                 </div>
               ))}
-              <div style={{ marginTop: 5, paddingTop: 5, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid #14b8a6', background: 'rgba(20,184,166,0.2)' }} />
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Metro station</span>
-                </div>
-              </div>
             </div>
 
             {data && (
@@ -374,7 +284,7 @@ export default function Heatmap() {
                     ['Zones shown',   data.total_points],
                     ['Peak density',  data.max_count?.toLocaleString()],
                     ['Filter',        `${minCount}+ violations`],
-                    ['Map style',     mapStyle],
+                    ['Map engine',    'Mappls Web SDK'],
                     ['Coverage',      'BLR metro area'],
                   ].map(([k, v]) => (
                     <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -409,10 +319,9 @@ export default function Heatmap() {
             <Card>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>ℹ️ How to read</div>
               <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.8 }}>
-                <p>Real map — zoom and pan freely.</p>
-                <p style={{ marginTop: 4 }}>Each heat blob = violations in a 1km² grid cell.</p>
-                <p style={{ marginTop: 4 }}>Teal circles = metro stations. Hover for name.</p>
-                <p style={{ marginTop: 4 }}>Switch Dark / Street / Satellite above.</p>
+                <p>Vector Map — zoom and pan seamlessly via MapmyIndia.</p>
+                <p style={{ marginTop: 4 }}>WebGL blobs = sub-locality violations.</p>
+                <p style={{ marginTop: 4 }}>Pin drops = metro station access links.</p>
               </div>
             </Card>
           </div>
