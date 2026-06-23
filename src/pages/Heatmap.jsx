@@ -6,7 +6,7 @@ import { PageHeader, Card, LoadingBox, ScoreBar } from '../components/UI'
 const BENGALURU = [12.9716, 77.5946]
 
 const METRO_STATIONS = [
-  { name: 'Majestic',       lat: 12.9767, lng: 77.5713 },
+  { name: 'Majestic',      lat: 12.9767, lng: 77.5713 },
   { name: 'MG Road',        lat: 12.9756, lng: 77.6099 },
   { name: 'Indiranagar',    lat: 12.9784, lng: 77.6408 },
   { name: 'Rajajinagar',    lat: 12.9919, lng: 77.5511 },
@@ -128,18 +128,17 @@ export default function Heatmap() {
 
     mapRef.current.invalidateSize()
 
-    // Helper to calculate smart configurations per zoom level to maintain structural context
     const getHeatSettings = (zoom) => {
       let radius = 25
       let blur = 15
       let maxIntensity = 1.0
 
       if (zoom >= 16) {
-        radius = 75; blur = 35; maxIntensity = 0.2 // Spreads point definitions wide when deep zoomed in
+        radius = 75; blur = 35; maxIntensity = 0.2 
       } else if (zoom >= 14) {
         radius = 50; blur = 25; maxIntensity = 0.5 
       } else if (zoom <= 11) {
-        radius = 14; blur = 10; maxIntensity = 2.8 // Prevents color bleeding when zooming out
+        radius = 14; blur = 10; maxIntensity = 2.8 
       }
       return { radius, blur, max: maxIntensity }
     }
@@ -171,16 +170,15 @@ export default function Heatmap() {
         maxZoom: 18,
         max: settings.max,
         gradient: {
-          '0.1': '#3b82f6',   // Low
-          '0.4': '#8b5cf6',   // Med-Low
-          '0.6': '#f59e0b',   // Med
-          '0.8': '#ef4444',   // High
-          '1.0': '#ffffff'    // Extreme Core
+          '0.1': '#3b82f6',   
+          '0.4': '#8b5cf6',   
+          '0.6': '#f59e0b',   
+          '0.8': '#ef4444',   
+          '1.0': '#ffffff'    
         },
       }).addTo(mapRef.current)
     }
 
-    // Capture zoom adjustments on-the-fly
     const handleZoom = () => {
       if (!heatRef.current || !mapRef.current) return
       const newZoom = mapRef.current.getZoom()
@@ -222,7 +220,6 @@ export default function Heatmap() {
         title="Violation Heatmap"
         subtitle="Live map of parking violation density — zoom and pan freely"
         right={
-          /* Mobile fix: Added dynamic flex wrapping style with maximum horizontal scroll support */
           <div className="map-controls-tray" style={{ 
             display: 'flex', 
             alignItems: 'center', 
@@ -255,7 +252,6 @@ export default function Heatmap() {
       />
 
       <style>{`
-        /* Responsive CSS utilities */
         .piq-tip {
           background: rgba(13,21,32,0.92) !important;
           border: 1px solid rgba(20,184,166,0.45) !important;
@@ -275,7 +271,7 @@ export default function Heatmap() {
         }
         .leaflet-control-attribution a { color: rgba(255,255,255,0.4) !important; }
         
-        .map-controls-tray::-webkit-scrollbar { display: none; } /* Hide track lines on mobile interfaces */
+        .map-controls-tray::-webkit-scrollbar { display: none; }
         
         .layout-grid {
           display: grid;
@@ -293,7 +289,8 @@ export default function Heatmap() {
       <div style={{ padding: '12px md:24px' }}>
         <div className="layout-grid">
 
-          <Card style={{ padding: 0, overflow: 'hidden', position: 'relative', background: '#0d1520' }}>
+          {/* FIX: Added zIndex: 0 here to shield your mobile sidebar layout from Leaflet's bleeding overlay effects */}
+          <Card style={{ padding: 0, overflow: 'hidden', position: 'relative', background: '#0d1520', zIndex: 0 }}>
             <div
               ref={mapDivRef}
               style={{ width: '100%', height: 540 }}

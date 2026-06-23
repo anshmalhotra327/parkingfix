@@ -18,15 +18,17 @@ import {
 const NAV = [
   { to:'/', icon:<FaChartBar />, label:'Dashboard' },
   { to:'/heatmap', icon:<FaMapMarkedAlt />, label:'Heatmap' },
-  { to:'/junctions', icon:<FaRoad />, label:'Junction Analysis' },
-  { to:'/patrol', icon:<FaCar />, label:'Patrol Management' },
-  { to:'/violations', icon:<FaClipboardList />, label:'Violation Records' },
-  { to:'/offenders', icon:<FaExclamationTriangle />, label:'Repeat Offenders' },
-  { to:'/metro', icon:<FaSubway />, label:'Metro Zones' },
-  { to:'/predict', icon:<FaBrain />, label:'Predictive Analytics' },
-  { to:'/alerts',     icon:<FaBell />,          label:'Alerts' },
-  { to:'/recidivism', icon:<FaRadiation />,     label:'Recidivism Risk' },
   { to:'/cascade',    icon:<FaProjectDiagram />, label:'Cascade Map' },
+  { to:'/junctions', icon:<FaRoad />, label:'Junction Analysis' },
+  { to:'/predict', icon:<FaBrain />, label:'Predictive Analytics' },
+  { to:'/patrol', icon:<FaCar />, label:'Patrol Management' },
+  ,
+  { to:'/offenders', icon:<FaExclamationTriangle />, label:'Repeat Offenders' },
+  { to:'/violations', icon:<FaClipboardList />, label:'Violation Records' },
+  { to:'/metro', icon:<FaSubway />, label:'Metro Zones' },
+   { to:'/recidivism', icon:<FaRadiation />,     label:'Recidivism Risk' },
+  { to:'/alerts',     icon:<FaBell />,          label:'Alerts' }
+ 
 ];
 
 export default function Layout() {
