@@ -35,14 +35,18 @@ export default function Layout() {
   const [menuOpen, setMenuOpen] = useState(false)
   const location = useLocation()
 
-  // --- FORCE REMOVE POLICE CAR FAVICON ---
+  // --- FORCE OVERWRITE THE TAB FAVICON WITH A BLANK IMAGE ---
   useEffect(() => {
-    const link = document.querySelector("link[rel~='icon']");
-    if (link) {
-      link.remove();
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.getElementsByTagName('head')[0].appendChild(link);
     }
+    // Injecting a completely blank 1x1 transparent pixel data URI to kill the police car icon
+    link.href = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
   }, []);
-  // ----------------------------------------
+  // ---------------------------------------------------------
 
   useEffect(() => {
     api.get('/alerts/unread').then(r => setUnread(r.data.length)).catch(() => {})
