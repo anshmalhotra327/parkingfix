@@ -20,6 +20,11 @@ export default function Dashboard() {
   const vtypes  = data.vehicle_types?.slice(0,6)
   const viol    = data.violation_types?.slice(0,6).map(([name,val])=>({ name: name.replace('PARKING IN A ','').replace('DEFECTIVE ','DEF. '), val }))
 
+  // Sort stations safely ensuring numbers are compared properly in descending order
+  const sortedStations = data.top_stations 
+    ? [...data.top_stations].sort((a, b) => (b.peak_pct || 0) - (a.peak_pct || 0))
+    : []
+
   return (
     <div>
       <PageHeader title="Command Center" subtitle="Bengaluru Parking Intelligence — Live Overview"
@@ -112,7 +117,7 @@ export default function Dashboard() {
               { key:'unique_vehicles', label:'Unique Vehicles', align:'right', render: r => r.unique_vehicles?.toLocaleString() },
               { key:'bar', label:'Load', render: r => <ScoreBar score={Math.min(100, Math.round(r.total/3500))} /> },
             ]}
-            rows={data.top_stations || []}
+            rows={sortedStations}
             keyFn={r=>r.police_station}
           />
         </Card>
