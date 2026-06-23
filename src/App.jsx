@@ -35,15 +35,18 @@ export default function App() {
           <Route path="/" element={<Guard><Layout /></Guard>}>
             <Route index element={<Dashboard />} />
             <Route path="heatmap"   element={<Heatmap />} />
+            <Route path="cascade"    element={<Cascade />} />
             <Route path="junctions" element={<Junctions />} />
-            <Route path="offenders" element={<Offenders />} />
+            <Route path="predict"    element={<Predict />} />
             <Route path="patrol"    element={<Patrol />} />
+            <Route path="offenders" element={<Offenders />} />
             <Route path="violations"element={<Violations />} />
             <Route path="metro"     element={<Metro />} />
-            <Route path="alerts"    element={<Alerts />} />
-            <Route path="predict"    element={<Predict />} />
             <Route path="recidivism" element={<Recidivism />} />
-            <Route path="cascade"    element={<Cascade />} />
+            <Route path="alerts"    element={<Alerts />} />
+            
+            
+            
           </Route>
         </Routes>
       </BrowserRouter>
